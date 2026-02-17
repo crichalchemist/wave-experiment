@@ -15,6 +15,7 @@ from src.data.knowledge_graph import PathResult, _EDGE_DATA_KEY, _HOP_DECAY, n_h
 
 _GRAPH_BACKEND_ENV: str = "DETECTIVE_GRAPH_BACKEND"
 _BACKEND_MEMORY: str = "memory"
+_BACKEND_KUZU: str = "kuzu"
 
 
 # ---------------------------------------------------------------------------
@@ -106,17 +107,25 @@ def graph_store_from_env() -> GraphStore:
     Instantiate the graph backend specified by the environment, defaulting to
     InMemoryGraph for zero-config local and CI runs.
 
-    KuzuGraph (persistent, embedded) is Task 30 — setting the env var to "kuzu"
-    now raises explicitly rather than silently falling back, so misconfiguration
-    is caught at startup rather than after silent data loss.
+    KuzuGraph (persistent, embedded) is selected when DETECTIVE_GRAPH_BACKEND=kuzu
+    and requires DETECTIVE_KUZU_PATH to be set pointing to a writable directory.
     """
     backend = os.environ.get(_GRAPH_BACKEND_ENV, _BACKEND_MEMORY)
     match backend:
         case str(b) if b == _BACKEND_MEMORY:
             return InMemoryGraph()
+        case str(b) if b == _BACKEND_KUZU:
+            from src.data.kuzu_graph import KuzuGraph, _KUZU_DB_PATH_ENV
+
+            db_path = os.environ.get(_KUZU_DB_PATH_ENV)
+            if db_path is None:
+                raise ValueError(
+                    f"{_KUZU_DB_PATH_ENV!r} is required for the kuzu backend. "
+                    f"Set it to a writable directory path."
+                )
+            return KuzuGraph(db_path=db_path)
         case _:
             raise ValueError(
                 f"Unknown graph backend {backend!r} in {_GRAPH_BACKEND_ENV}. "
-                f"Supported: {_BACKEND_MEMORY!r}. "
-                f"KuzuGraph backend is not yet implemented (Task 30)."
+                f"Supported: {_BACKEND_MEMORY!r}, {_BACKEND_KUZU!r}."
             )
