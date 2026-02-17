@@ -12,6 +12,9 @@ from unittest.mock import patch
 
 import pytest
 
+from src.data.knowledge_graph import _HOP_DECAY
+from src.core.types import RelationType
+
 # Probe at import time so the skipif marker has a concrete bool
 try:
     import kuzu as _kuzu
@@ -96,7 +99,7 @@ def test_persistence_across_connections(tmp_path: pytest.TempPathFactory) -> Non
     g1.add_edge("X", "Y", RelationType.CONDITIONAL, 0.6)
 
     # Explicitly close the first connection before opening a second one
-    g1._conn.close()
+    g1.close()
 
     g2 = KuzuGraph(db_path=db_path)
     edge = g2.get_edge("X", "Y")
@@ -121,7 +124,8 @@ def test_n_hop_paths_single_hop(tmp_path: pytest.TempPathFactory) -> None:
     assert len(paths) == 1
     assert paths[0].path == ("A", "B")
     assert paths[0].hops == 1
-    assert paths[0].confidence > 0.0
+    expected = 0.9 * _HOP_DECAY[RelationType.CAUSAL]  # 0.9 * 0.7 = 0.63
+    assert abs(paths[0].confidence - expected) < 1e-9
 
 
 @kuzu_available

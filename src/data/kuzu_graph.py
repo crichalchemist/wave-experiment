@@ -146,6 +146,10 @@ class KuzuGraph:
             hop_count=1,
         )
 
+    def close(self) -> None:
+        """Release the Kuzu connection and database handles."""
+        self._conn.close()
+
     def n_hop_paths(
         self,
         source: str,
@@ -160,6 +164,9 @@ class KuzuGraph:
         confidence decays per hop using the same _HOP_DECAY table as InMemoryGraph so
         both backends produce identical numeric results for identical graphs.
         """
+        if max_hops < 1:
+            raise ValueError(f"max_hops must be >= 1, got {max_hops!r}")
+
         # Guard: Kuzu raises an error (not returns empty) if the node doesn't exist,
         # so we probe first with a cheap existence check.
         for node_id in (source, target):
