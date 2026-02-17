@@ -16,8 +16,8 @@ def test_mock_provider_embed_returns_configured_embedding() -> None:
 
 
 def test_vllm_provider_complete_calls_chat_completions() -> None:
-    # Patch OpenAI at the import site inside __post_init__ so no real client is made.
-    with patch("openai.OpenAI"):
+    # Patch OpenAI at the usage site (module-level name) for proper test isolation.
+    with patch("src.core.providers._OpenAI"):
         provider = VLLMProvider(base_url="http://localhost:8000/v1", model="mistral")
 
     mock_client = MagicMock()
@@ -35,7 +35,7 @@ def test_vllm_provider_complete_calls_chat_completions() -> None:
 
 
 def test_vllm_provider_satisfies_protocol() -> None:
-    with patch("openai.OpenAI"):
+    with patch("src.core.providers._OpenAI"):
         provider = VLLMProvider(base_url="http://localhost:8000/v1", model="mistral")
 
     assert isinstance(provider, ModelProvider)

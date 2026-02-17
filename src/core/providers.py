@@ -1,6 +1,11 @@
 from typing import Any, Protocol, runtime_checkable
 from dataclasses import dataclass, field
 
+try:
+    from openai import OpenAI as _OpenAI
+except ImportError:
+    _OpenAI = None  # type: ignore[assignment,misc]
+
 
 @runtime_checkable
 class ModelProvider(Protocol):
@@ -30,8 +35,9 @@ class VLLMProvider:
     _client: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        from openai import OpenAI
-        self._client = OpenAI(base_url=self.base_url, api_key="not-needed")
+        if _OpenAI is None:
+            raise ImportError("openai package required for VLLMProvider")
+        self._client = _OpenAI(base_url=self.base_url, api_key="not-needed")
 
     def complete(self, prompt: str, **kwargs) -> str:
         response = self._client.chat.completions.create(
