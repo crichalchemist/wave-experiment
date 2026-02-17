@@ -16,7 +16,12 @@ def test_hypothesis_update():
     """Test updating hypothesis confidence."""
     h1 = Hypothesis.create("Test", 0.8)
     h2 = h1.update_confidence(0.6)
-    
+
     assert h2.confidence == 0.6
     assert h2.parent_id == h1.id
     assert h1.confidence == 0.8  # Original unchanged
+
+
+def test_hypothesis_invalid_confidence_raises() -> None:
+    with pytest.raises(ValueError, match="confidence must be in"):
+        Hypothesis.create(text="test", confidence=1.5)

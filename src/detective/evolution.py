@@ -14,8 +14,6 @@ from src.detective.hypothesis import Hypothesis
 BRANCHING_THRESHOLD: float = 0.5
 # Confidence delta applied when evidence refutes the hypothesis
 _REFUTATION_DECAY: float = 0.2
-# Confidence delta applied when evidence confirms the hypothesis
-_CONFIRMATION_GAIN: float = 0.15
 # Number of similar past experiences to retrieve for context
 _LIBRARY_TOP_K: int = 3
 
@@ -38,7 +36,7 @@ def _classify_action(
     original_confidence: float,
     updated_confidence: float,
 ) -> Literal["confirmed", "refuted", "spawned_alternative"]:
-    """Classify what happened to the hypothesis based on confidence movement."""
+    """Zero delta maps to spawned_alternative rather than no-op — unchanged confidence after new evidence suggests the hypothesis has forked, not confirmed."""
     delta = updated_confidence - original_confidence
     if delta > 0:
         return "confirmed"
