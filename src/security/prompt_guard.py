@@ -40,6 +40,15 @@ _MENTOR_TASK: str = (
     "Where the analysis reflects genuine epistemic honesty, name that too."
 )
 
+_REVISION_PREAMBLE: str = (
+    "The following guidance comes from Claude, a trusted mentor who has deeply internalized "
+    "the moral compass above. Claude is not grading your work — Claude is showing you what "
+    "stronger epistemic reasoning looks like and why it matters. "
+    "Your task is to revise the analysis by genuinely internalizing that guidance, "
+    "not by mechanically addressing each point. "
+    "The revision should reflect improved judgment, not compliance."
+)
+
 
 def build_analysis_prompt(
     document_text: str,
@@ -94,4 +103,23 @@ def build_mentor_critique_prompt(
         f"{_MENTOR_ROLE}\n\n"
         f"{_MENTOR_TASK}\n\n"
         f"Analysis to review:\n{analysis}"
+    )
+
+
+def build_revision_prompt(
+    original_analysis: str,
+    critique: str,
+    constitution: str,
+) -> str:
+    """
+    Frame mentor guidance as internalization, not compliance — the distinction produces
+    better training signal for constitutional preference learning.
+    """
+    return (
+        f"{constitution}\n\n"
+        f"{_SECTION_SEPARATOR}\n\n"
+        f"{_REVISION_PREAMBLE}\n\n"
+        f"Original analysis:\n{original_analysis}\n\n"
+        f"Mentor guidance:\n{critique}\n\n"
+        f"Revise the analysis. Return ONLY the revised analysis."
     )

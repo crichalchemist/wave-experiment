@@ -3,21 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.core.providers import ModelProvider
-from src.security.prompt_guard import build_critique_prompt, build_mentor_critique_prompt
+from src.security.prompt_guard import build_mentor_critique_prompt, build_revision_prompt
 
 _DEFAULT_CONSTITUTION_PATH: Path = Path("docs/constitution.md")
-
-# Revision framing makes explicit that Claude's guidance carries epistemic authority —
-# the local model is not satisfying a reviewer, it is learning from a mentor who holds
-# the same values it is meant to develop.
-_REVISION_PREAMBLE: str = (
-    "The following guidance comes from Claude, a trusted mentor who has deeply internalized "
-    "the moral compass above. Claude is not grading your work — Claude is showing you what "
-    "stronger epistemic reasoning looks like and why it matters. "
-    "Your task is to revise the analysis by genuinely internalizing that guidance, "
-    "not by mechanically addressing each point. "
-    "The revision should reflect improved judgment, not compliance."
-)
 
 
 def load_constitution(path: Path = _DEFAULT_CONSTITUTION_PATH) -> str:
@@ -69,15 +57,12 @@ def generate_preference_pair(
     Claude's externally-trained values produce a stronger critique signal than same-model
     self-critique, and the mentor framing shapes how the generator incorporates that signal.
     """
-    mentor_guidance = critique_against_constitution(original_analysis, constitution, critic_provider)
+    critique = critique_against_constitution(original_analysis, constitution, critic_provider)
 
-    revision_prompt = (
-        f"{constitution}\n\n"
-        f"---\n\n"
-        f"{_REVISION_PREAMBLE}\n\n"
-        f"Original analysis:\n{original_analysis}\n\n"
-        f"Mentor guidance from Claude:\n{mentor_guidance}\n\n"
-        f"Return ONLY the revised analysis."
+    revision_prompt = build_revision_prompt(
+        original_analysis=original_analysis,
+        critique=critique,
+        constitution=constitution,
     )
     revised_analysis = generator_provider.complete(revision_prompt)
 

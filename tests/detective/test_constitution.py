@@ -84,21 +84,11 @@ def test_generate_preference_pair_returns_pair() -> None:
 
 
 def test_generate_preference_pair_uses_both_providers() -> None:
-    generator = MockProvider(response="revised")
-    critic = MockProvider(response="mentor guidance")
-    constitution = "## Constitution"
-    generate_preference_pair(
-        instruction="test",
-        original_analysis="original",
-        constitution=constitution,
-        generator_provider=generator,
-        critic_provider=critic,
-    )
     # Definitive check: chosen comes from generator, rejected is unchanged original
     pair = generate_preference_pair(
         instruction="test",
         original_analysis="original",
-        constitution=constitution,
+        constitution="## Constitution",
         generator_provider=MockProvider(response="generator_output"),
         critic_provider=MockProvider(response="critic_output"),
     )
@@ -107,29 +97,22 @@ def test_generate_preference_pair_uses_both_providers() -> None:
 
 
 def test_revision_prompt_frames_guidance_as_mentor_direction() -> None:
-    """Verify the generator receives mentor framing in the revision prompt, not bare critique text."""
-    captured_prompts: list[str] = []
+    """Revision prompt must contain mentor framing, not compliance-checker framing."""
+    from unittest.mock import MagicMock
+    mock_generator = MagicMock()
+    mock_generator.complete.return_value = "revised analysis"
+    critic = MockProvider(response="You missed the temporal gap.")
+    constitution = "## Core Principles\n\nEpistemic honesty."
 
-    class CapturingProvider:
-        def complete(self, prompt: str, **kwargs) -> str:
-            captured_prompts.append(prompt)
-            return "revised analysis"
-
-        def embed(self, text: str) -> list[float]:
-            return []
-
-    constitution = "## Constitution\n\nEpistemic honesty."
     generate_preference_pair(
-        instruction="test",
-        original_analysis="original analysis",
+        instruction="detect gaps",
+        original_analysis="no gaps found",
         constitution=constitution,
-        generator_provider=CapturingProvider(),
-        critic_provider=MockProvider(response="mentor says: name the failure mode"),
+        generator_provider=mock_generator,
+        critic_provider=critic,
     )
-    assert len(captured_prompts) == 1
-    revision_prompt = captured_prompts[0]
-    # Mentor framing must appear in the revision prompt so the generator
-    # understands it is receiving direction, not just a critique to satisfy
-    assert "trusted mentor" in revision_prompt or "Mentor guidance" in revision_prompt
-    assert "mentor says: name the failure mode" in revision_prompt
-    assert "original analysis" in revision_prompt
+
+    # Inspect the prompt passed to the generator
+    revision_prompt = mock_generator.complete.call_args[0][0]
+    assert "trusted mentor" in revision_prompt
+    assert "You missed the temporal gap." in revision_prompt
