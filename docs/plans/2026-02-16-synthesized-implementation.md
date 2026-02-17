@@ -1836,3 +1836,96 @@ def build_critique_prompt(
 ```
 
 **Tests:** 5 tests covering: constitution appears before document content, document wrapped in delimiters, untrusted framing present, injection attempt in document does not appear outside delimiters, critique prompt has constitution first.
+
+---
+
+### Task 29: GraphStore Protocol + InMemoryGraph refactor
+
+**Goal:** Refactor `src/data/knowledge_graph.py` to use a `GraphStore` Protocol. The current functional copy-on-write API becomes a thin adapter. `InMemoryGraph` wraps networkx and is the test double. All existing tests must continue to pass.
+
+**Files:**
+- Modify: `src/data/knowledge_graph.py`
+- Create: `src/data/graph_store.py` — GraphStore Protocol + InMemoryGraph
+- Modify: `tests/data/test_knowledge_graph.py` — add protocol satisfaction test
+
+**GraphStore Protocol spec:**
+
+```python
+@runtime_checkable
+class GraphStore(Protocol):
+    def add_edge(self, source: str, target: str, relation: RelationType, confidence: float) -> None: ...
+    def get_edge(self, source: str, target: str) -> KnowledgeEdge | None: ...
+    def n_hop_paths(self, source: str, target: str, max_hops: int = 3) -> list[PathResult]: ...
+    def persist(self) -> None: ...  # no-op for in-memory implementations
+```
+
+**InMemoryGraph spec:**
+
+```python
+@dataclass
+class InMemoryGraph:
+    """Wraps networkx DiGraph. Not frozen — graph is inherently mutable state."""
+    _graph: nx.DiGraph = field(default_factory=nx.DiGraph, init=False, repr=False)
+
+    def add_edge(self, source, target, relation, confidence) -> None: ...
+    def get_edge(self, source, target) -> KnowledgeEdge | None: ...
+    def n_hop_paths(self, source, target, max_hops=3) -> list[PathResult]: ...
+    def persist(self) -> None: pass  # no-op
+```
+
+**TDD steps:** write failing test for protocol satisfaction → implement → pass → all 10 existing tests still pass → commit.
+
+---
+
+### Task 30: KuzuGraph — persistent graph store
+
+**Goal:** Add `src/data/kuzu_graph.py` with `KuzuGraph` implementing `GraphStore` Protocol using Kuzu embedded graph database. Wire to `graph_store_from_env()`.
+
+**Files:**
+- Create: `src/data/kuzu_graph.py`
+- Modify: `src/data/graph_store.py` — add `graph_store_from_env()`
+- Modify: `pyproject.toml` — add kuzu to optional deps
+- Create: `tests/data/test_kuzu_graph.py`
+
+**KuzuGraph spec (abbreviated):**
+
+```python
+@dataclass
+class KuzuGraph:
+    db_path: str
+
+    def __post_init__(self) -> None:
+        import kuzu
+        self._db = kuzu.Database(self.db_path)
+        self._conn = kuzu.Connection(self._db)
+        self._ensure_schema()
+
+    def _ensure_schema(self) -> None:
+        # CREATE NODE TABLE and REL TABLE if not exists
+        ...
+
+    def add_edge(self, source, target, relation, confidence) -> None:
+        # MERGE entities, create relationship
+        ...
+
+    def persist(self) -> None:
+        pass  # Kuzu is ACID — writes are immediately durable
+```
+
+**`graph_store_from_env()` spec:**
+
+```python
+def graph_store_from_env() -> GraphStore:
+    import os
+    store_type = os.environ.get("GRAPH_STORE")
+    if store_type is None:
+        raise ValueError("GRAPH_STORE is not set. Must be one of: 'memory', 'kuzu'")
+    if store_type == "memory":
+        return InMemoryGraph()
+    if store_type == "kuzu":
+        db_path = os.environ.get("GRAPH_DB_PATH", "data/graph.kuzu")
+        return KuzuGraph(db_path=db_path)
+    raise ValueError(f"Unknown GRAPH_STORE={store_type!r}. Must be 'memory' or 'kuzu'")
+```
+
+**Note:** `kuzu` is optional — tests for `KuzuGraph` should be skipped if kuzu is not installed (`pytest.importorskip("kuzu")`). Add `kuzu>=0.5.0` to `[project.optional-dependencies]` under a new `graph` group in pyproject.toml.
