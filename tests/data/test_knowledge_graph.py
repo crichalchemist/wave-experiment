@@ -3,10 +3,12 @@ import networkx as nx
 
 from src.core.types import RelationType
 from src.data.knowledge_graph import (
+    PathResult,
     add_edge,
     get_edge,
     make_graph,
     n_hop_paths,
+    _HOP_DECAY,
 )
 
 
@@ -47,8 +49,8 @@ def test_n_hop_paths_finds_direct_path() -> None:
     g = add_edge(g, "A", "B", RelationType.CAUSAL, 0.9)
     paths = n_hop_paths(g, "A", "B", max_hops=1)
     assert len(paths) == 1
-    assert paths[0]["path"] == ["A", "B"]
-    assert paths[0]["hops"] == 1
+    assert paths[0].path == ("A", "B")
+    assert paths[0].hops == 1
 
 
 def test_n_hop_paths_finds_multi_hop() -> None:
@@ -57,8 +59,8 @@ def test_n_hop_paths_finds_multi_hop() -> None:
     g = add_edge(g, "B", "C", RelationType.SEQUENTIAL, 0.9)
     paths = n_hop_paths(g, "A", "C", max_hops=2)
     assert len(paths) == 1
-    assert paths[0]["path"] == ["A", "B", "C"]
-    assert paths[0]["hops"] == 2
+    assert paths[0].path == ("A", "B", "C")
+    assert paths[0].hops == 2
 
 
 def test_n_hop_paths_empty_for_missing_node() -> None:
@@ -82,4 +84,13 @@ def test_n_hop_paths_sorted_by_confidence_descending() -> None:
     g = add_edge(g, "B", "C", RelationType.SEQUENTIAL, 0.9)
     paths = n_hop_paths(g, "A", "C", max_hops=3)
     assert len(paths) == 2
-    assert paths[0]["confidence"] >= paths[1]["confidence"]
+    assert paths[0].confidence >= paths[1].confidence
+
+
+def test_n_hop_paths_direct_causal_confidence() -> None:
+    g = make_graph()
+    g = add_edge(g, "A", "B", RelationType.CAUSAL, 0.9)
+    paths = n_hop_paths(g, "A", "B", max_hops=1)
+    # One hop: 0.9 * _HOP_DECAY[CAUSAL] = 0.9 * 0.7 = 0.63
+    expected = 0.9 * 0.7
+    assert paths[0].confidence == pytest.approx(expected)

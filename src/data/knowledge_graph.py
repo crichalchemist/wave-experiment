@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import networkx as nx
 
 from src.core.types import KnowledgeEdge, RelationType
@@ -18,8 +20,16 @@ _HOP_DECAY: dict[RelationType, float] = {
 _EDGE_DATA_KEY: str = "edge"  # key under which KnowledgeEdge is stored in networkx edge attrs
 
 
+@dataclass(frozen=True)
+class PathResult:
+    """A traversal path through the knowledge graph with aggregate confidence."""
+    path: tuple[str, ...]
+    confidence: float
+    hops: int
+
+
 def make_graph() -> KnowledgeGraph:
-    """Start with an empty directed knowledge graph."""
+    """New graph per analysis run — no shared state between independent analyses."""
     return nx.DiGraph()
 
 
@@ -46,7 +56,7 @@ def add_edge(
 
 
 def get_edge(graph: KnowledgeGraph, source: str, target: str) -> KnowledgeEdge | None:
-    """Return the edge between source and target, or None if it does not exist."""
+    """None return is a valid finding — absence of a direct edge between entities is investigatively meaningful."""
     if not graph.has_edge(source, target):
         return None
     return graph[source][target][_EDGE_DATA_KEY]
@@ -57,10 +67,10 @@ def n_hop_paths(
     source: str,
     target: str,
     max_hops: int = 3,
-) -> list[dict]:
+) -> list[PathResult]:
     """
     Find all simple paths from source to target within max_hops.
-    Each result carries the path, aggregate confidence, and the weakest relation type
+    Each result carries the path, aggregate confidence, and hop count
     — path confidence decays per hop according to the relation-specific decay factor.
     """
     if max_hops < 1:
@@ -78,17 +88,16 @@ def n_hop_paths(
             edges = [get_edge(graph, path[i], path[i + 1]) for i in range(len(path) - 1)]
             if any(e is None for e in edges):
                 continue
-            # Compute aggregate confidence: product of each edge's confidence * hop decay
+            # Compute aggregate confidence: product of each edge's confidence * per-hop decay
             aggregate = 1.0
-            for hop_idx, edge in enumerate(edges):
-                decay = _HOP_DECAY.get(edge.relation, 0.8)
-                aggregate *= edge.confidence * (decay ** (hop_idx + 1))
-            results.append({
-                "path": path,
-                "confidence": aggregate,
-                "hops": len(path) - 1,
-            })
+            for edge in edges:
+                aggregate *= edge.confidence * _HOP_DECAY[edge.relation]
+            results.append(PathResult(
+                path=tuple(path),
+                confidence=aggregate,
+                hops=len(path) - 1,
+            ))
     except nx.NodeNotFound:
         return []
 
-    return sorted(results, key=lambda r: r["confidence"], reverse=True)
+    return sorted(results, key=lambda r: r.confidence, reverse=True)
