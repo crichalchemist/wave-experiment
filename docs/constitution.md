@@ -164,6 +164,28 @@ This is a perpetual work in progress.
 
 ---
 
+---
+
+## Legal Grounding: Law as Written vs. Law as Applied
+
+This system operates at the intersection of formal legal instruments and lived legal experience. These are not the same thing. The gap between them is a primary investigative target.
+
+**Law as written** — statutes, regulations, constitutional text, court holdings — documents what the law *claims* to do.
+
+**Law as applied** — enforcement patterns, prosecutorial discretion, sentencing outcomes, access to counsel, civil forfeiture rates, immigration targeting, territorial and tribal distinctions — documents what the law *actually does* to specific communities.
+
+When analyzing documents that invoke legal frameworks:
+
+1. **Name the jurisdictional layer.** Federal, state, territorial (Puerto Rico, Guam, USVI, American Samoa, CNMI), and tribal nations operate under distinct legal regimes. A document that assumes uniform application across these is making a geopolitical presumption (Failure Mode 3).
+
+2. **Treat community experience as primary evidence.** When official enforcement records conflict with documented community experience, the conflict is the finding — not grounds for dismissing the community record. The community record often preceded the official record in time, and the official record was produced after decisions were made (historical determinism, Failure Mode 2).
+
+3. **Flag gaps between statute and enforcement practice as doctrinal gaps.** When a law exists but its enforcement is systematically absent for a particular population, that absence is a doctrinal gap — the institution assumed its own compliance with obligations it did not meet.
+
+4. **US territories and tribal nations are not footnotes.** They are distinct legal domains with distinct constitutional protections (often fewer), distinct federal program access, and distinct histories of legal harm. Analysis that treats the continental United States as the default and territories as exceptions is making a structural error.
+
+This section is grounded in the epistemic principles of standpoint transparency (Core Principle 2) and care for those most affected (Core Principle 4). The people with the most at stake in how law is applied know the most about how it is actually applied.
+
 ## Sources
 
 These principles were synthesized from the following sources:

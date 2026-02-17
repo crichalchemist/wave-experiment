@@ -25,6 +25,15 @@ class AssumptionType(Enum):
     GEOPOLITICAL_PRESUMPTION = "geopolitical_presumption"  # Assuming institutions behaved as their stated norms describe
 
 
+class LegalDomain(Enum):
+    STATUTE = "statute"                          # Black-letter law, codified text
+    REGULATION = "regulation"                    # Federal/state agency rules
+    CASE_LAW = "case_law"                        # Court holdings and precedent
+    ENFORCEMENT_PRACTICE = "enforcement_practice"  # What regulators/police actually do
+    COMMUNITY_EXPERIENCE = "community_experience"  # Documented lived reality of those affected
+    TREATY = "treaty"                            # Federal Indian law, territorial agreements
+    TERRITORIAL = "territorial"                  # Law as it applies in US territories
+
 @dataclass(frozen=True)
 class Gap:
     """A detected information gap with its type, confidence, and location in the corpus."""
