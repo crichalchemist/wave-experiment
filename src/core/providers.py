@@ -9,10 +9,12 @@ except ImportError:
 
 try:
     from azure.ai.inference import ChatCompletionsClient as _ChatCompletionsClient
+    from azure.ai.inference.models import UserMessage as _UserMessage
     from azure.core.credentials import AzureKeyCredential as _AzureKeyCredential
 except ImportError:
     _ChatCompletionsClient = None  # type: ignore[assignment,misc]
-    _AzureKeyCredential = None  # type: ignore[assignment,misc]
+    _AzureKeyCredential = None     # type: ignore[assignment,misc]
+    _UserMessage = None            # type: ignore[assignment,misc]
 
 _VLLM_DUMMY_API_KEY: str = "not-needed"  # vLLM requires non-empty key; value is ignored
 _AZURE_EMBED_NOT_SUPPORTED: str = "AzureFoundryProvider does not support embeddings"
@@ -93,9 +95,8 @@ class AzureFoundryProvider:
         object.__setattr__(self, "_client", client)
 
     def complete(self, prompt: str, **kwargs) -> str:
-        from azure.ai.inference.models import UserMessage
         response = self._client.complete(
-            messages=[UserMessage(content=prompt)],
+            messages=[_UserMessage(content=prompt)],
             model=self.model,
         )
         content = response.choices[0].message.content
@@ -109,7 +110,11 @@ class AzureFoundryProvider:
 
 def provider_from_env() -> ModelProvider:
     """Select provider from environment. DETECTIVE_PROVIDER=vllm|azure."""
-    provider_type = os.environ.get(_ENV_PROVIDER, _PROVIDER_VLLM)
+    provider_type = os.environ.get(_ENV_PROVIDER)
+    if provider_type is None:
+        raise ValueError(
+            f"{_ENV_PROVIDER} is not set. Must be one of: {_PROVIDER_VLLM!r}, {_PROVIDER_AZURE!r}"
+        )
     if provider_type == _PROVIDER_VLLM:
         base_url = os.environ[_ENV_VLLM_URL]
         model = os.environ[_ENV_VLLM_MODEL]

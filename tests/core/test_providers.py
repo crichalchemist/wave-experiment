@@ -80,16 +80,18 @@ def test_azure_provider_satisfies_protocol() -> None:
 def test_azure_provider_complete_calls_client() -> None:
     with patch("src.core.providers._ChatCompletionsClient"), \
          patch("src.core.providers._AzureKeyCredential"):
-        provider = AzureFoundryProvider(
-            endpoint="https://example.azure.com", api_key="key", model="claude"
-        )
+        provider = AzureFoundryProvider(endpoint="https://example.azure.com", api_key="key", model="claude")
     mock_client = MagicMock()
     mock_client.complete.return_value.choices[0].message.content = "azure response"
     object.__setattr__(provider, "_client", mock_client)
-    # Patch the lazy local import of UserMessage inside complete()
-    mock_models = MagicMock()
-    with patch.dict("sys.modules", {"azure.ai.inference.models": mock_models}):
+    mock_user_message = MagicMock()
+    with patch("src.core.providers._UserMessage", return_value=mock_user_message) as mock_msg_cls:
         result = provider.complete("test prompt")
+    mock_msg_cls.assert_called_once_with(content="test prompt")
+    mock_client.complete.assert_called_once_with(
+        messages=[mock_user_message],
+        model="claude",
+    )
     assert result == "azure response"
 
 
@@ -130,4 +132,10 @@ def test_provider_from_env_returns_azure(monkeypatch) -> None:
 def test_provider_from_env_raises_on_unknown(monkeypatch) -> None:
     monkeypatch.setenv("DETECTIVE_PROVIDER", "unknown")
     with pytest.raises(ValueError, match="Unknown provider type"):
+        provider_from_env()
+
+
+def test_provider_from_env_raises_when_not_set(monkeypatch) -> None:
+    monkeypatch.delenv("DETECTIVE_PROVIDER", raising=False)
+    with pytest.raises(ValueError, match="DETECTIVE_PROVIDER is not set"):
         provider_from_env()
