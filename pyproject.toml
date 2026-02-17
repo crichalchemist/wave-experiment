@@ -40,6 +40,9 @@ dev = [
 [project.scripts]
 detective = "src.cli.main:cli"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"

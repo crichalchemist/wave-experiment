@@ -17,6 +17,9 @@ _HTTP_OK_MIN = 200
 _HTTP_OK_MAX = 299
 _HTTP_NOT_FOUND = 404
 
+_SEARCH_QUERY_KEY = "query"
+_RESPONSE_FILES_KEY = "files"
+
 
 def _build_headers(token: str) -> dict[str, str]:
     """Bearer auth header — extracted so tests can verify headers without I/O."""
@@ -58,6 +61,10 @@ class MCPVaultClient:
     def _http(self):  # noqa: ANN201 — internal accessor, type varies by mock
         return object.__getattribute__(self, "_client")
 
+    def close(self) -> None:
+        """Release the underlying httpx connection pool."""
+        self._http.close()
+
     def write_note(self, path: str, content: str) -> None:
         url = f"{self.host}/vault/{path}"
         response = self._http.put(url, content=content, headers=_build_headers(self.token))
@@ -80,15 +87,23 @@ class MCPVaultClient:
     def search_notes(self, query: str) -> tuple[str, ...]:
         url = f"{self.host}/search/simple/"
         response = self._http.post(
-            url, json={"query": query}, headers=_build_headers(self.token)
+            url, json={_SEARCH_QUERY_KEY: query}, headers=_build_headers(self.token)
         )
-        files: list[str] = response.json().get("files", [])
+        if not (_HTTP_OK_MIN <= response.status_code <= _HTTP_OK_MAX):
+            raise RuntimeError(
+                f"search_notes failed for query {query!r}: HTTP {response.status_code}"
+            )
+        files: list[str] = response.json().get(_RESPONSE_FILES_KEY, [])
         return tuple(files)
 
     def list_notes(self, prefix: str = "") -> tuple[str, ...]:
         url = f"{self.host}/vault/"
         response = self._http.get(url, headers=_build_headers(self.token))
-        files: list[str] = response.json().get("files", [])
+        if not (_HTTP_OK_MIN <= response.status_code <= _HTTP_OK_MAX):
+            raise RuntimeError(
+                f"list_notes failed: HTTP {response.status_code}"
+            )
+        files: list[str] = response.json().get(_RESPONSE_FILES_KEY, [])
         sorted_files = sorted(files)
         if not prefix:
             return tuple(sorted_files)

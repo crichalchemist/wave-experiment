@@ -231,3 +231,66 @@ def test_mcp_vault_from_env_custom_host(
 
     assert client.host == "http://obsidian.local:27124"
     assert client.token == "my-token"
+
+
+# ---------------------------------------------------------------------------
+# New tests: HTTP status checks, close(), prefix edge cases
+# ---------------------------------------------------------------------------
+
+
+@patch("src.memory.mcp_vault._httpx")
+def test_search_notes_raises_on_non_2xx(mock_httpx: MagicMock) -> None:
+    mock_client = MagicMock()
+    mock_httpx.Client.return_value = mock_client
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_client.post.return_value = mock_response
+    vault = MCPVaultClient(host="http://localhost:27123", token="bad-token")
+    with pytest.raises(RuntimeError, match="401"):
+        vault.search_notes("ADR")
+
+
+@patch("src.memory.mcp_vault._httpx")
+def test_list_notes_raises_on_non_2xx(mock_httpx: MagicMock) -> None:
+    mock_client = MagicMock()
+    mock_httpx.Client.return_value = mock_client
+    mock_response = MagicMock()
+    mock_response.status_code = 403
+    mock_client.get.return_value = mock_response
+    vault = MCPVaultClient(host="http://localhost:27123", token="bad-token")
+    with pytest.raises(RuntimeError, match="403"):
+        vault.list_notes()
+
+
+@patch("src.memory.mcp_vault._httpx")
+def test_list_notes_no_prefix_returns_all(mock_httpx: MagicMock) -> None:
+    mock_client = MagicMock()
+    mock_httpx.Client.return_value = mock_client
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "files": ["decisions/ADR-001.md", "hypothesis-traces/trace.md"]
+    }
+    mock_client.get.return_value = mock_response
+    vault = MCPVaultClient(host="http://localhost:27123", token="tok")
+    result = vault.list_notes()  # no prefix
+    assert set(result) == {"decisions/ADR-001.md", "hypothesis-traces/trace.md"}
+
+
+def test_prefix_parts_multi_segment() -> None:
+    from src.memory.mcp_vault import _prefix_parts
+    assert _prefix_parts("decisions/2024") == ("decisions", "2024")
+
+
+def test_prefix_parts_trailing_slash() -> None:
+    from src.memory.mcp_vault import _prefix_parts
+    assert _prefix_parts("decisions/") == ("decisions",)
+
+
+@patch("src.memory.mcp_vault._httpx")
+def test_close_delegates_to_http_client(mock_httpx: MagicMock) -> None:
+    mock_client = MagicMock()
+    mock_httpx.Client.return_value = mock_client
+    vault = MCPVaultClient(host="http://localhost:27123", token="tok")
+    vault.close()
+    mock_client.close.assert_called_once()
