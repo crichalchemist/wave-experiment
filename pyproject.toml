@@ -1,0 +1,43 @@
+[project]
+name = "detective-llm"
+version = "0.1.0"
+description = "Detective LLM: Information Gap Analysis for Geopolitical Influence Networks"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "networkx>=3.0",
+    "pydantic>=2.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "click>=8.1.0",
+    "pdfplumber>=0.10.0",
+    # RL training + alignment
+    "trl>=0.8.0",
+    "peft>=0.10.0",
+    # Graph neural network layer
+    "torch-geometric>=2.5.0",
+    # Retrieval pipeline
+    "llama-index>=0.10.0",
+    # NER / entity extraction
+    "spacy>=3.7.0",
+    # Local inference client (vLLM exposes OpenAI-compatible API)
+    "openai>=1.0.0",
+    # Azure AI Foundry (Claude fallback)
+    "azure-ai-inference>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "mypy>=1.4.0",
+    "ruff>=0.0.280",
+    "jupyter>=1.0.0",
+]
+
+[project.scripts]
+detective = "src.cli.main:cli"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
