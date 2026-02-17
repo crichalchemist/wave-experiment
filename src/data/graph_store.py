@@ -43,7 +43,7 @@ class GraphStore(Protocol):
     def get_edge(self, source: str, target: str) -> KnowledgeEdge | None: ...
 
     def n_hop_paths(
-        self, source: str, target: str, max_hops: int
+        self, source: str, target: str, max_hops: int = 3
     ) -> list[PathResult]: ...
 
 

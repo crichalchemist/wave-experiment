@@ -74,6 +74,8 @@ def test_n_hop_paths_direct() -> None:
     assert len(paths) == 1
     assert paths[0].hops == 1
     assert paths[0].path == ("A", "B")
+    expected = 0.9 * _HOP_DECAY[RelationType.SEQUENTIAL]
+    assert paths[0].confidence == pytest.approx(expected)
 
 
 def test_n_hop_paths_missing_nodes_returns_empty() -> None:
