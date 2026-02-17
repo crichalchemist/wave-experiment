@@ -1,3 +1,5 @@
+import pytest
+
 from src.core.types import (
     AssumptionType,
     Gap,
@@ -20,12 +22,10 @@ def test_assumption_type_has_three_members() -> None:
 
 
 def test_gap_is_immutable() -> None:
+    from dataclasses import FrozenInstanceError
     gap = Gap(type=GapType.TEMPORAL, description="missing Q3", confidence=0.8, location="doc-1")
-    try:
+    with pytest.raises(FrozenInstanceError):
         gap.confidence = 0.5  # type: ignore[misc]
-        assert False, "Should have raised FrozenInstanceError"
-    except Exception:
-        pass
 
 
 def test_knowledge_edge_default_hop_count() -> None:
