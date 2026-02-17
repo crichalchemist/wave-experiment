@@ -1413,3 +1413,249 @@ AZURE_FOUNDRY_MODEL=claude-sonnet-4-5
 ```
 
 Copy to `.env` (gitignored). Never commit credentials.
+
+---
+
+## Phase 5: Vault Memory Integration (Tasks 24-26)
+
+These tasks were added after the initial plan. The Obsidian vault at `docs/vault/` serves as both a development decision log and a runtime memory store queried via the Obsidian MCP server.
+
+---
+
+### Task 24: VaultClient Protocol + FileVaultClient
+
+**Goal:** Functional vault access protocol with a direct-file implementation for tests and development.
+
+**Files:**
+- Create: `src/memory/__init__.py`
+- Create: `src/memory/vault.py`
+- Create: `tests/memory/__init__.py`
+- Create: `tests/memory/test_vault.py`
+
+**Spec for `src/memory/vault.py`:**
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class VaultClient(Protocol):
+    def write_note(self, path: str, content: str) -> None: ...
+    def read_note(self, path: str) -> str: ...
+    def search_notes(self, query: str) -> list[str]: ...  # returns list of note paths
+    def list_notes(self, directory: str) -> list[str]: ...  # returns list of note paths
+
+
+@dataclass(frozen=True)
+class FileVaultClient:
+    """Direct file I/O vault client. Used in tests and local development."""
+    vault_root: Path
+
+    def write_note(self, path: str, content: str) -> None:
+        note_path = self.vault_root / path
+        note_path.parent.mkdir(parents=True, exist_ok=True)
+        note_path.write_text(content, encoding="utf-8")
+
+    def read_note(self, path: str) -> str:
+        note_path = self.vault_root / path
+        if not note_path.exists():
+            raise FileNotFoundError(f"Note not found: {path}")
+        return note_path.read_text(encoding="utf-8")
+
+    def search_notes(self, query: str) -> list[str]:
+        """Full-text search across vault markdown files."""
+        query_lower = query.lower()
+        return [
+            str(p.relative_to(self.vault_root))
+            for p in self.vault_root.rglob("*.md")
+            if query_lower in p.read_text(encoding="utf-8").lower()
+        ]
+
+    def list_notes(self, directory: str) -> list[str]:
+        dir_path = self.vault_root / directory
+        if not dir_path.exists():
+            return []
+        return [
+            str(p.relative_to(self.vault_root))
+            for p in dir_path.glob("*.md")
+        ]
+
+
+def vault_from_env() -> VaultClient:
+    """Return vault client from environment. Defaults to FileVaultClient on vault root."""
+    import os
+    vault_root = os.environ.get("VAULT_ROOT", "docs/vault")
+    return FileVaultClient(vault_root=Path(vault_root))
+```
+
+**Tests:** 5 tests covering write/read round-trip, FileNotFoundError on missing note, search returning matching paths, list_notes returning correct paths, protocol satisfaction.
+
+**TDD steps:** write failing tests → run → implement → pass → commit.
+
+---
+
+### Task 25: MCPVaultClient (Obsidian MCP integration)
+
+**Goal:** Vault client that delegates to the Obsidian MCP server via HTTP (Obsidian Local REST API plugin).
+
+**Files:**
+- Modify: `src/memory/vault.py` (add MCPVaultClient)
+- Modify: `tests/memory/test_vault.py` (add MCPVaultClient tests with mocked HTTP)
+
+**Spec for MCPVaultClient:**
+
+```python
+@dataclass(frozen=True)
+class MCPVaultClient:
+    """Delegates vault operations to the Obsidian Local REST API (MCP-compatible)."""
+    base_url: str  # e.g. "http://localhost:27123"
+    api_key: str
+
+    def write_note(self, path: str, content: str) -> None:
+        import httpx
+        response = httpx.put(
+            f"{self.base_url}/vault/{path}",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            content=content.encode("utf-8"),
+        )
+        response.raise_for_status()
+
+    def read_note(self, path: str) -> str:
+        import httpx
+        response = httpx.get(
+            f"{self.base_url}/vault/{path}",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
+        if response.status_code == 404:
+            raise FileNotFoundError(f"Note not found: {path}")
+        response.raise_for_status()
+        return response.text
+
+    def search_notes(self, query: str) -> list[str]:
+        import httpx
+        response = httpx.post(
+            f"{self.base_url}/search/simple/",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            params={"query": query},
+        )
+        response.raise_for_status()
+        return [item["filename"] for item in response.json()]
+
+    def list_notes(self, directory: str) -> list[str]:
+        import httpx
+        response = httpx.get(
+            f"{self.base_url}/vault/{directory}/",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
+        response.raise_for_status()
+        return [item["path"] for item in response.json()["files"]]
+```
+
+Update `vault_from_env()` to support `VAULT_CLIENT=mcp` path:
+```python
+def vault_from_env() -> VaultClient:
+    import os
+    client_type = os.environ.get("VAULT_CLIENT", "file")
+    if client_type == "mcp":
+        base_url = os.environ["OBSIDIAN_MCP_URL"]  # e.g. http://localhost:27123
+        api_key = os.environ["OBSIDIAN_API_KEY"]
+        return MCPVaultClient(base_url=base_url, api_key=api_key)
+    vault_root = os.environ.get("VAULT_ROOT", "docs/vault")
+    return FileVaultClient(vault_root=Path(vault_root))
+```
+
+**Dependencies:** Add `httpx>=0.27.0` to pyproject.toml (sync HTTP client, used for MCP REST calls).
+
+**Tests:** Mock `httpx.put/get/post` calls; verify correct URL construction and auth header.
+
+---
+
+### Task 26: Vault integration — write ADRs and traces from runtime
+
+**Goal:** Wire vault writes into the hypothesis evolution and gap detection pipelines so the system records its reasoning as it works.
+
+**Files:**
+- Modify: `src/detective/evolution.py` — write hypothesis trace to vault after each evolution step
+- Modify: `src/detective/constitution.py` — write gap findings to vault after each analysis
+- Create: `src/memory/adr.py` — helper to render an ADR-formatted markdown note from a decision dict
+
+**Spec for `src/memory/adr.py`:**
+
+```python
+from datetime import date
+from typing import TypedDict
+
+
+class ADRData(TypedDict):
+    id: str
+    title: str
+    status: str
+    tags: list[str]
+    decision: str
+    context: str
+    consequences: str
+
+
+def render_adr(data: ADRData) -> str:
+    """Render an ADR as Obsidian-compatible markdown with YAML frontmatter."""
+    today = date.today().isoformat()
+    tags_str = ", ".join(f'"{t}"' for t in data["tags"])
+    return f"""---
+id: {data["id"]}
+title: {data["title"]}
+status: {data["status"]}
+date: {today}
+tags: [{tags_str}]
+---
+
+# {data["id"]}: {data["title"]}
+
+## Decision
+
+{data["decision"]}
+
+## Context
+
+{data["context"]}
+
+## Consequences
+
+{data["consequences"]}
+"""
+
+
+def render_hypothesis_trace(
+    hypothesis_id: str,
+    text: str,
+    confidence: float,
+    evidence: str,
+    action: str,
+) -> str:
+    """Render a hypothesis trace note for vault storage."""
+    from datetime import datetime
+    timestamp = datetime.now().isoformat()
+    return f"""---
+hypothesis_id: {hypothesis_id}
+confidence: {confidence}
+action: {action}
+timestamp: {timestamp}
+---
+
+# Hypothesis Trace: {hypothesis_id}
+
+## Hypothesis
+
+{text}
+
+## Evidence
+
+{evidence}
+
+## Action
+
+**{action}** (confidence: {confidence:.2f})
+"""
+```
