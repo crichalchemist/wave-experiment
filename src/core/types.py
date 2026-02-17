@@ -20,9 +20,9 @@ class RelationType(Enum):
 
 
 class AssumptionType(Enum):
-    COGNITIVE_BIAS = "cognitive_bias"                      # Module A
-    HISTORICAL_DETERMINISM = "historical_determinism"      # Module B
-    GEOPOLITICAL_PRESUMPTION = "geopolitical_presumption"  # Module C
+    COGNITIVE_BIAS = "cognitive_bias"                      # Systematic reasoning errors regardless of domain
+    HISTORICAL_DETERMINISM = "historical_determinism"      # Assuming documents record events neutrally and in order
+    GEOPOLITICAL_PRESUMPTION = "geopolitical_presumption"  # Assuming institutions behaved as their stated norms describe
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,12 @@ class Gap:
     confidence: float
     location: str  # document identifier or section reference
 
+    def __post_init__(self) -> None:
+        if not (0.0 <= self.confidence <= 1.0):
+            raise ValueError(
+                f"Gap.confidence must be in [0.0, 1.0], got {self.confidence!r}"
+            )
+
 
 @dataclass(frozen=True)
 class KnowledgeEdge:
@@ -42,3 +48,17 @@ class KnowledgeEdge:
     relation: RelationType
     confidence: float
     hop_count: int = 1
+
+    def __post_init__(self) -> None:
+        if not (0.0 <= self.confidence <= 1.0):
+            raise ValueError(
+                f"KnowledgeEdge.confidence must be in [0.0, 1.0], got {self.confidence!r}"
+            )
+        if self.hop_count < 1:
+            raise ValueError(
+                f"KnowledgeEdge.hop_count must be >= 1, got {self.hop_count!r}"
+            )
+        if not self.source:
+            raise ValueError("KnowledgeEdge.source must not be empty")
+        if not self.target:
+            raise ValueError("KnowledgeEdge.target must not be empty")
