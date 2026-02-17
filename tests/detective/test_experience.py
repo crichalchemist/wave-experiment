@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pytest
 from src.detective.experience import (
     EMPTY_LIBRARY,
@@ -10,13 +12,15 @@ from src.detective.experience import (
 
 def _make_experience(
     hypothesis_id: str = "h1",
+    hypothesis_text: str = "the hypothesis text",
     evidence: str = "doc evidence",
-    action: str = "confirmed",
+    action: Literal["confirmed", "refuted", "spawned_alternative"] = "confirmed",
     confidence_delta: float = 0.1,
     outcome_quality: float = 0.8,
 ) -> Experience:
     return Experience(
         hypothesis_id=hypothesis_id,
+        hypothesis_text=hypothesis_text,
         evidence=evidence,
         action=action,
         confidence_delta=confidence_delta,
@@ -53,15 +57,14 @@ def test_add_experience_accumulates() -> None:
 
 def test_query_similar_returns_top_k() -> None:
     lib = (
-        _make_experience(hypothesis_id="money laundering", evidence="wire transfer"),
-        _make_experience(hypothesis_id="money laundering shell", evidence="offshore account"),
-        _make_experience(hypothesis_id="influence network", evidence="lobbying records"),
+        _make_experience(hypothesis_text="money laundering scheme", evidence="wire transfer", hypothesis_id="h1"),
+        _make_experience(hypothesis_text="money laundering via shell company", evidence="offshore account", hypothesis_id="h2"),
+        _make_experience(hypothesis_text="foreign influence network", evidence="lobbying records", hypothesis_id="h3"),
     )
     results = query_similar(lib, "money laundering scheme", "wire transfer pattern", top_k=2)
     assert len(results) == 2
-    # Both money laundering experiences should score higher than influence network
-    ids = {r.hypothesis_id for r in results}
-    assert "influence network" not in ids
+    texts = {r.hypothesis_text for r in results}
+    assert "foreign influence network" not in texts
 
 
 def test_query_similar_empty_library_returns_empty() -> None:
@@ -73,6 +76,7 @@ def test_experience_invalid_action_raises() -> None:
     with pytest.raises(ValueError, match="action must be one of"):
         Experience(
             hypothesis_id="h1",
+            hypothesis_text="some hypothesis",
             evidence="e1",
             action="invalid",  # type: ignore[arg-type]
             confidence_delta=0.1,

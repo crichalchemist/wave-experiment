@@ -6,17 +6,20 @@ from typing import Literal
 
 @dataclass(frozen=True)
 class Experience:
-    """A recorded outcome from a single hypothesis evolution step."""
+    """Records a single evolution step so future reasoning can learn from prior trajectories."""
 
     hypothesis_id: str
+    hypothesis_text: str  # the natural-language hypothesis text
     evidence: str
     action: Literal["confirmed", "refuted", "spawned_alternative"]
     confidence_delta: float  # signed: positive = hypothesis strengthened
-    outcome_quality: float   # scored post-hoc in [0.0, 1.0]
+    outcome_quality: float
 
     def __post_init__(self) -> None:
         if not self.hypothesis_id:
             raise ValueError("Experience.hypothesis_id must not be empty")
+        if not self.hypothesis_text:
+            raise ValueError("Experience.hypothesis_text must not be empty")
         if not self.evidence:
             raise ValueError("Experience.evidence must not be empty")
         if self.action not in ("confirmed", "refuted", "spawned_alternative"):
@@ -37,7 +40,7 @@ EMPTY_LIBRARY: ExperienceLibrary = ()
 
 
 def add_experience(library: ExperienceLibrary, experience: Experience) -> ExperienceLibrary:
-    """Return new library with experience appended. Does not mutate."""
+    """Immutable append — caller always receives a new value; prior library states are preserved for audit."""
     return library + (experience,)
 
 
@@ -47,14 +50,14 @@ def query_similar(
     evidence: str,
     top_k: int = 3,
 ) -> ExperienceLibrary:
-    """Return the top_k most similar past experiences using Jaccard similarity on word sets."""
+    """Consult prior trajectories before evolving a hypothesis — similar past contexts inform the branching decision."""
     if not library:
         return EMPTY_LIBRARY
 
     query_words = set((hypothesis_text + " " + evidence).lower().split())
 
     def jaccard(exp: Experience) -> float:
-        exp_words = set((exp.hypothesis_id + " " + exp.evidence).lower().split())
+        exp_words = set((exp.hypothesis_text + " " + exp.evidence).lower().split())
         intersection = len(query_words & exp_words)
         union = len(query_words | exp_words)
         return intersection / union if union else 0.0
