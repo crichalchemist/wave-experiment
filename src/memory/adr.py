@@ -6,6 +6,12 @@ from src.memory.vault import VaultClient
 
 _DECISIONS_PREFIX = "decisions"
 _TRACES_PREFIX = "hypothesis-traces"
+_VALID_STATUSES: frozenset[str] = frozenset({"proposed", "accepted", "deprecated", "superseded"})
+
+
+def _yaml_str(value: str) -> str:
+    """Quote a scalar for YAML — prevents colon/hash/newline injection in frontmatter."""
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
 @dataclass(frozen=True)
@@ -24,6 +30,12 @@ class ADR:
     consequences: str
     files: tuple[str, ...]
     tags: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.status not in _VALID_STATUSES:
+            raise ValueError(
+                f"Invalid ADR status {self.status!r}. Must be one of: {sorted(_VALID_STATUSES)}"
+            )
 
 
 @dataclass(frozen=True)
@@ -48,14 +60,17 @@ def render_adr(adr: ADR) -> str:
 
     Frontmatter first so Obsidian indexes metadata without parsing the body.
     """
-    tags_inline = "[" + ", ".join(adr.tags) + "]" if adr.tags else "[]"
+    if adr.tags:
+        tags_block = "\n" + "".join(f"  - {_yaml_str(t)}\n" for t in adr.tags)
+    else:
+        tags_block = " []\n"
     files_block = "\n".join(adr.files) if adr.files else "(none)"
     return (
         f"---\n"
-        f"id: {adr.id}\n"
-        f"title: {adr.title}\n"
-        f"status: {adr.status}\n"
-        f"tags: {tags_inline}\n"
+        f"id: {_yaml_str(adr.id)}\n"
+        f"title: {_yaml_str(adr.title)}\n"
+        f"status: {_yaml_str(adr.status)}\n"
+        f"tags:{tags_block}"
         f"---\n"
         f"\n"
         f"## Decision\n"
@@ -86,10 +101,10 @@ def render_hypothesis_trace(trace: HypothesisTrace) -> str:
     parent_value = trace.parent_id if trace.parent_id is not None else "null"
     return (
         f"---\n"
-        f"hypothesis_id: {trace.hypothesis_id}\n"
+        f"hypothesis_id: {_yaml_str(trace.hypothesis_id)}\n"
         f"confidence: {trace.confidence}\n"
-        f"parent_id: {parent_value}\n"
-        f"timestamp: {trace.timestamp}\n"
+        f"parent_id: {_yaml_str(parent_value)}\n"
+        f"timestamp: {_yaml_str(trace.timestamp)}\n"
         f"---\n"
         f"\n"
         f"## Hypothesis\n"

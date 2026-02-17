@@ -63,8 +63,8 @@ def trace_no_gaps() -> HypothesisTrace:
 def test_render_adr_contains_frontmatter(sample_adr: ADR) -> None:
     rendered = render_adr(sample_adr)
     assert rendered.startswith("---\n")
-    assert "id: ADR-009" in rendered
-    assert "title: Some Decision" in rendered
+    assert 'id: "ADR-009"' in rendered
+    assert 'title: "Some Decision"' in rendered
     # YAML block closes before body content
     parts = rendered.split("---")
     assert len(parts) >= 3  # opening ---, frontmatter, closing ---
@@ -93,14 +93,52 @@ def test_render_adr_tags_in_frontmatter(sample_adr: ADR) -> None:
     assert "memory" in frontmatter
 
 
+def test_render_adr_tags_block_style(sample_adr: ADR) -> None:
+    rendered = render_adr(sample_adr)
+    # Block-style tags: each tag on its own line with "  - " prefix
+    assert '  - "architecture"' in rendered
+    assert '  - "memory"' in rendered
+
+
+def test_render_adr_empty_tags_inline(sample_adr: ADR) -> None:
+    adr_no_tags = ADR(
+        id="ADR-010",
+        title="No Tags",
+        status="proposed",
+        context="ctx",
+        decision="dec",
+        consequences="cons",
+        files=(),
+        tags=(),
+    )
+    rendered = render_adr(adr_no_tags)
+    assert "tags: []" in rendered
+
+
+def test_render_adr_yaml_safe_title() -> None:
+    """A colon-space in the title must not break YAML frontmatter."""
+    adr = ADR(
+        id="ADR-011",
+        title="Use httpx: async client",
+        status="accepted",
+        context="ctx",
+        decision="dec",
+        consequences="cons",
+        files=(),
+        tags=(),
+    )
+    rendered = render_adr(adr)
+    assert 'title: "Use httpx: async client"' in rendered
+
+
 # --- HypothesisTrace rendering tests ---
 
 def test_render_hypothesis_trace_contains_frontmatter(sample_trace: HypothesisTrace) -> None:
     rendered = render_hypothesis_trace(sample_trace)
     assert rendered.startswith("---\n")
-    assert "hypothesis_id: H-001" in rendered
+    assert 'hypothesis_id: "H-001"' in rendered
     assert "confidence: 0.72" in rendered
-    assert "timestamp: 2026-02-17T12:00:00" in rendered
+    assert 'timestamp: "2026-02-17T12:00:00"' in rendered
 
 
 def test_render_hypothesis_trace_sections(sample_trace: HypothesisTrace) -> None:
@@ -114,6 +152,7 @@ def test_render_hypothesis_trace_no_gaps(trace_no_gaps: HypothesisTrace) -> None
     rendered = render_hypothesis_trace(trace_no_gaps)
     assert "(none)" in rendered
     assert "## Linked Gaps" in rendered
+    assert 'parent_id: "null"' in rendered
 
 
 # --- Vault persistence tests ---
@@ -146,3 +185,19 @@ def test_adr_is_frozen(sample_adr: ADR) -> None:
 def test_hypothesis_trace_is_frozen(sample_trace: HypothesisTrace) -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         sample_trace.confidence = 0.99  # type: ignore[misc]
+
+
+# --- Status validation tests ---
+
+def test_adr_invalid_status_raises() -> None:
+    with pytest.raises(ValueError, match="Invalid ADR status"):
+        ADR(
+            id="ADR-001",
+            title="Test",
+            status="actived",  # typo — should be "accepted"
+            context="ctx",
+            decision="dec",
+            consequences="cons",
+            files=(),
+            tags=(),
+        )
