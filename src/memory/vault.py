@@ -16,19 +16,19 @@ class VaultClient(Protocol):
     """
 
     def write_note(self, path: str, content: str) -> None:
-        """Persist content at the given relative path, creating parents as needed."""
+        """Vault-relative paths allow notes to be meaningful both in-repo and in Obsidian."""
         ...
 
     def read_note(self, path: str) -> str:
-        """Return note content; raises FileNotFoundError if the path does not exist."""
+        """Raising rather than returning None makes missing notes fail loud — callers must not silently skip absent decisions."""
         ...
 
     def search_notes(self, query: str) -> tuple[str, ...]:
-        """Return sorted relative paths of notes whose content contains query (case-insensitive)."""
+        """Substring match is intentional — queries here are human analytical terms, not structured queries."""
         ...
 
     def list_notes(self, prefix: str = "") -> tuple[str, ...]:
-        """Return all relative paths under optional prefix, sorted lexicographically."""
+        """Prefix scoping lets callers work within a vault subtree (decisions/, hypothesis-traces/) without scanning all notes."""
         ...
 
 
@@ -40,38 +40,44 @@ class FileVaultClient:
     the public methods are relative to that root.
     """
 
-    _root: Path
+    root: Path
 
     def write_note(self, path: str, content: str) -> None:
-        target = self._root / path
+        target = self.root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
 
     def read_note(self, path: str) -> str:
-        target = self._root / path
+        target = self.root / path
         if not target.exists():
             raise FileNotFoundError(f"Note not found: {path}")
         return target.read_text(encoding="utf-8")
 
     def search_notes(self, query: str) -> tuple[str, ...]:
+        if not self.root.is_dir():
+            return ()
         lower_query = query.lower()
         matching = (
-            str(note.relative_to(self._root))
-            for note in self._root.glob("**/*.md")
+            str(note.relative_to(self.root))
+            for note in self.root.glob("**/*.md")
             if lower_query in note.read_text(encoding="utf-8").lower()
         )
         return tuple(sorted(matching))
 
     def list_notes(self, prefix: str = "") -> tuple[str, ...]:
-        all_relative = (
-            str(note.relative_to(self._root))
-            for note in self._root.glob("**/*.md")
+        if not self.root.is_dir():
+            return ()
+        all_relative = sorted(
+            str(p.relative_to(self.root))
+            for p in self.root.glob("**/*.md")
         )
-        filtered = (
+        if not prefix:
+            return tuple(all_relative)
+        prefix_parts = Path(prefix.rstrip("/")).parts
+        return tuple(
             p for p in all_relative
-            if p.startswith(prefix)
+            if Path(p).parts[:len(prefix_parts)] == prefix_parts
         )
-        return tuple(sorted(filtered))
 
 
 def vault_from_env() -> VaultClient:

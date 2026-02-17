@@ -80,3 +80,21 @@ def test_write_creates_parent_dirs(tmp_path: Path) -> None:
     assert (tmp_path / "a" / "b" / "c.md").exists()
     result = client.read_note("a/b/c.md")
     assert result == "nested content"
+
+
+def test_search_empty_vault(tmp_path: Path) -> None:
+    vault = FileVaultClient(tmp_path / "empty")
+    # root does not exist yet — must not raise, must return empty tuple
+    assert vault.search_notes("anything") == ()
+
+
+def test_list_notes_empty_vault(tmp_path: Path) -> None:
+    vault = FileVaultClient(tmp_path / "empty")
+    assert vault.list_notes() == ()
+
+
+def test_list_notes_default_arg(tmp_path: Path) -> None:
+    vault = FileVaultClient(tmp_path)
+    vault.write_note("foo.md", "bar")
+    result = vault.list_notes()  # no prefix arg — exercises default ""
+    assert "foo.md" in result
