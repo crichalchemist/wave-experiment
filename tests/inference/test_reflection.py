@@ -49,7 +49,8 @@ def test_inject_no_sentence_boundary_appends():
     from src.inference.reflection import inject_reflection_trigger
     prompt = "no punctuation here"
     result = inject_reflection_trigger(prompt, "principle")
-    assert result.startswith(prompt) or "Wait" in result
+    assert result.startswith(prompt)
+    assert "Wait" in result
 
 
 def test_find_injection_point_returns_after_last_period():
