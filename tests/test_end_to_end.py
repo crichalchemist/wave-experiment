@@ -43,13 +43,25 @@ class _MockConstitution:
 # ---------------------------------------------------------------------------
 
 def test_full_pipeline_returns_analysis_result() -> None:
-    """All 6 AnalysisResult fields are present after a full 4-layer pipeline run."""
-    provider = MockProvider(response="Step one reasoning.\nConclusion: plausible.")
+    """
+    All three major subsystems integrate without errors using MockProvider only.
+
+    - Network analysis: InMemoryGraph provides evidence nodes (gap detection)
+    - Hypothesis tracking: evolve_hypothesis produces an auditable lineage
+    - Pipeline: analyze() returns all 6 AnalysisResult fields
+    """
+    provider = MockProvider(response="0.8")
     graph = InMemoryGraph()
+    graph.add_edge("EntityA", "PolicyX", RelationType.CAUSAL, 0.9)
+    graph.add_edge("PolicyX", "OutcomeZ", RelationType.SEQUENTIAL, 0.7)
     constitution = _MockConstitution()
 
+    # Network analysis: graph has nodes and edges (gaps = evidence from graph)
+    assert graph.successors("EntityA") == ["PolicyX"]
+
+    # Pipeline: runs all 4 layers over the populated graph
     result = analyze(
-        claim="Entity A was active throughout the period",
+        claim="EntityA influenced PolicyX during the period",
         provider=provider,
         graph=graph,
         library=EMPTY_LIBRARY,
@@ -59,10 +71,25 @@ def test_full_pipeline_returns_analysis_result() -> None:
     assert isinstance(result, AnalysisResult)
     assert isinstance(result.claim, str) and result.claim
     assert isinstance(result.intent, AnalyticalIntent)
+    # evidence tuple — the "gaps" layer: nodes retrieved from the network graph
     assert isinstance(result.evidence, tuple)
+    assert len(result.evidence) >= 1  # graph nodes were found (network analysis ran)
     assert isinstance(result.reasoning, ReasoningChain)
     assert isinstance(result.verdict, str) and result.verdict
-    assert isinstance(result.confidence, float)
+    assert 0.0 <= result.confidence <= 1.0
+
+    # Hypothesis tracking: evolve a hypothesis over the same evidence (audit lineage)
+    hypothesis = Hypothesis.create(
+        text="EntityA influenced PolicyX via causal mechanisms.",
+        confidence=0.5,
+    )
+    evolved, _experience = evolve_hypothesis(
+        hypothesis=hypothesis,
+        new_evidence="PolicyX outcome confirmed in public record.",
+        library=EMPTY_LIBRARY,
+        provider=provider,
+    )
+    assert evolved.parent_id == hypothesis.id  # lineage preserved
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +156,7 @@ def test_reflection_trigger_integrates_with_pipeline() -> None:
 
     assert "Wait" in result
     assert principle in result
-    assert original_text[:len(original_text) - 1] in result  # body of text is preserved
+    assert original_text in result  # full original text body is preserved verbatim
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +178,9 @@ def test_no_external_calls_in_pipeline() -> None:
         constitution=constitution,
     )
 
-    # The verdict is the raw output of provider.complete(), which is our configured response.
+    # MockProvider is a pure in-memory stub — complete() always returns the configured
+    # response string and never touches the network.  If any external LLM were invoked,
+    # it would return a different string; equality here proves only the mock path was taken.
     assert result.verdict == configured_response
 
 
