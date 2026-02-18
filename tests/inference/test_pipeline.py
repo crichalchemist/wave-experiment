@@ -43,12 +43,13 @@ def test_parse_intent_extracts_keywords():
 
 
 def test_parse_intent_filters_stopwords():
+    """Stopword filtering is case-insensitive: 'The' (capitalised) is filtered just like 'the'."""
     from src.inference.pipeline import parse_intent
-    result = parse_intent("Entity A influenced Policy X")
-    # "A" is not in stopwords (stopwords are lowercase), so this tests
-    # that lowercased stopwords like "a" are filtered when token matches
-    # The stopword "the" should not appear in keywords
+    result = parse_intent("The entity was active in the region")
+    assert "The" not in result.keywords
     assert "the" not in result.keywords
+    assert "in" not in result.keywords
+    assert "entity" in result.keywords
 
 
 def test_parse_intent_returns_analytical_intent():

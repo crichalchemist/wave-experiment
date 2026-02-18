@@ -24,6 +24,10 @@ _STOPWORDS: frozenset[str] = frozenset(
     {"a", "an", "the", "in", "of", "and", "or", "is", "was", "to", "for"}
 )
 
+# Relevance scores for evidence retrieval — named so the scoring policy is explicit
+_RELEVANCE_DIRECT_MATCH: float = 1.0
+_RELEVANCE_NEIGHBOUR: float = 0.5
+
 _DEFAULT_CONSTITUTION_PRINCIPLE: str = "Epistemic honesty above analytical comfort."
 
 # Denominator offset for confidence heuristic: confidence = steps / (steps + offset)
@@ -163,13 +167,13 @@ def retrieve_evidence(intent: AnalyticalIntent, graph: GraphStore) -> list[Evide
         if node.lower() in lower_keywords or any(
             kw in node.lower() for kw in lower_keywords
         ):
-            scored[node] = 1.0
+            scored[node] = _RELEVANCE_DIRECT_MATCH
 
     # Expand to immediate neighbours of matched nodes
     for matched_node in list(scored.keys()):
         for neighbour in neighbour_map.get(matched_node, set()):
             if neighbour not in scored:
-                scored[neighbour] = 0.5
+                scored[neighbour] = _RELEVANCE_NEIGHBOUR
 
     return [
         Evidence(
@@ -253,7 +257,8 @@ def _parse_reasoning_response(response: str) -> ReasoningChain:
         return ReasoningChain(steps=(), conclusion=response.strip())
 
     conclusion = non_empty[-1]
-    steps = tuple(non_empty)
+    # Exclude the conclusion from steps — the verify prompt renders them separately
+    steps = tuple(non_empty[:-1]) if len(non_empty) > 1 else ()
     return ReasoningChain(steps=steps, conclusion=conclusion)
 
 
@@ -285,7 +290,16 @@ def verify_inline(
         conclusion=chain.conclusion,
     )
 
-    triggered_prompt = inject_reflection_trigger(base_prompt, _DEFAULT_CONSTITUTION_PRINCIPLE)
+    # Derive the reflection principle from the constitution object when possible.
+    # Duck-typed against `.critique()` so both ConstitutionClient (which loads a
+    # full text constitution) and lightweight mock objects work without coupling
+    # this layer to a concrete type.
+    if hasattr(constitution, "critique"):
+        principle = constitution.critique(chain.conclusion)  # type: ignore[union-attr]
+    else:
+        principle = _DEFAULT_CONSTITUTION_PRINCIPLE
+
+    triggered_prompt = inject_reflection_trigger(base_prompt, principle)
     verdict = provider.complete(triggered_prompt)
 
     n_steps = len(chain.steps)
