@@ -1,0 +1,44 @@
+# Detective LLM — Azure GPU deployment requirements
+#
+# Minimum VM SKU: Standard_NC6s_v3 (6 vCPU, 112 GB RAM, 1× V100 16 GB)
+# Recommended:    Standard_NC24s_v3 or Standard_ND40rs_v2 for full context length
+#
+# Install order:
+#   1. pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+#   2. pip install -r requirements-azure.txt
+#
+# The setup.sh in this directory handles the CPU (Ollama) path for L-series VMs.
+# Use this file when GPU is available and vLLM inference throughput is required.
+
+# Inference engine (GPU)
+vllm>=0.4.0
+
+# Azure AI Foundry (Claude critic / fallback)
+azure-ai-inference>=1.0.0
+
+# HuggingFace training stack
+transformers>=4.40.0
+trl>=0.8.0
+peft>=0.10.0
+datasets>=2.18.0
+accelerate>=0.28.0
+
+# Graph
+networkx>=3.0
+kuzu>=0.5.0
+
+# API
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+
+# Vault / memory
+httpx>=0.27.0
+
+# CLI
+click>=8.1.0
+
+# NLP
+spacy>=3.7.0
+
+# Data
+pdfplumber>=0.10.0
