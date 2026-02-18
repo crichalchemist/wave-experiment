@@ -10,7 +10,30 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve repo root.  Honour an explicit env-var override first, then try to
+# detect from the script's own location, then walk up from CWD.
+if [ -z "${REPO_ROOT:-}" ]; then
+  _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [ -f "${_script_dir}/../pyproject.toml" ]; then
+    REPO_ROOT="$(cd "${_script_dir}/.." && pwd)"
+  else
+    # Script was run from outside the repo (e.g. copied to ~/setup-detective.sh);
+    # walk up from CWD to find a directory that contains pyproject.toml.
+    _candidate="${PWD}"
+    while [ "${_candidate}" != "/" ]; do
+      [ -f "${_candidate}/pyproject.toml" ] && break
+      _candidate="$(dirname "${_candidate}")"
+    done
+    if [ -f "${_candidate}/pyproject.toml" ]; then
+      REPO_ROOT="${_candidate}"
+    else
+      echo "ERROR: Could not locate repo root (no pyproject.toml found)."
+      echo "  Run this script from inside the cloned repository, or override:"
+      echo "    REPO_ROOT=/path/to/wave-experiment bash setup.sh"
+      exit 1
+    fi
+  fi
+fi
 VENV_DIR="${REPO_ROOT}/.venv-deploy"
 
 echo "=== Detective LLM — L-series CPU deployment setup ==="
@@ -52,7 +75,8 @@ ollama pull deepseek-r1:7b
 
 echo ""
 echo "--- Verifying inference ---"
-ollama run deepseek-r1:7b "Reply with only: OK" --nowordwrap 2>/dev/null | head -3
+# Pipe to head then discard the SIGPIPE signal; the model responding at all is the pass signal.
+ollama run deepseek-r1:7b "Reply with only: OK" --nowordwrap 2>/dev/null | head -3 || true
 
 # ------------------------------------------------------------------
 # 3. Python environment (3.11/3.12 — torch requires < 3.14)
