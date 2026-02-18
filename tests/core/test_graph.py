@@ -12,6 +12,11 @@ def _make_mock_nn():
 
 
 def _instantiate_layer_with_mocks():
+    # NOTE: reload() inside a patch context is idempotent while torch is absent
+    # (ImportError re-runs, all three names stay None). If torch ever becomes
+    # available in this test runner, the reload will import the real packages
+    # and leave the module in a mixed state after the patch reverts. At that
+    # point, refactor to use persistent patchers instead of reload().
     import src.core.graph as graph_module
     mock_nn = _make_mock_nn()
     mock_torch = MagicMock()
