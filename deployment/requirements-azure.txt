@@ -11,34 +11,34 @@
 # Use this file when GPU is available and vLLM inference throughput is required.
 
 # Inference engine (GPU)
-vllm>=0.4.0
+vllm
 
 # Azure AI Foundry (Claude critic / fallback)
-azure-ai-inference>=1.0.0
+azure-ai-inference
 
 # HuggingFace training stack
-transformers>=4.40.0
-trl>=0.8.0
-peft>=0.10.0
-datasets>=2.18.0
-accelerate>=0.28.0
+transformers
+trl
+peft
+datasets
+accelerate
 
 # Graph
-networkx>=3.0
-kuzu>=0.5.0
+networkx
+kuzu
 
 # API
-fastapi>=0.100.0
-uvicorn[standard]>=0.23.0
+fastapi
+uvicorn[standard]
 
 # Vault / memory
-httpx>=0.27.0
+httpx
 
 # CLI
-click>=8.1.0
+click
 
 # NLP
-spacy>=3.7.0
+spacy
 
 # Data
-pdfplumber>=0.10.0
+pdfplumber

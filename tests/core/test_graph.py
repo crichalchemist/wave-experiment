@@ -28,6 +28,12 @@ def _instantiate_layer_with_mocks():
         patch("src.core.graph.GATv2Conv", mock_gat_cls),
     ):
         reload(graph_module)
+        # reload() re-executes `import torch_geometric` which succeeds when
+        # torch_geometric is installed, overwriting all three patches.
+        # Re-apply so __init__ reads the mocks via sys.modules[__name__].
+        graph_module.torch = mock_torch
+        graph_module.nn = mock_nn
+        graph_module.GATv2Conv = mock_gat_cls
         layer = graph_module.HybridGraphLayer.__new__(graph_module.HybridGraphLayer)
         graph_module.HybridGraphLayer.__init__(layer)
 
@@ -107,6 +113,9 @@ def test_forward_calls_gat_and_returns_result():
         patch("src.core.graph.GATv2Conv", mock_gat_cls),
     ):
         reload(graph_module)
+        graph_module.torch = mock_torch
+        graph_module.nn = mock_nn
+        graph_module.GATv2Conv = mock_gat_cls
         layer = graph_module.HybridGraphLayer.__new__(graph_module.HybridGraphLayer)
         graph_module.HybridGraphLayer.__init__(layer)
 

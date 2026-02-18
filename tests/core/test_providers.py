@@ -1,3 +1,4 @@
+import json
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -68,39 +69,46 @@ def test_vllm_provider_raises_on_missing_openai() -> None:
 # --- AzureFoundryProvider tests ---
 
 
+def _make_azure_urlopen_mock(text: str) -> MagicMock:
+    """Build a mock for urllib.request.urlopen that returns an Anthropic-format body."""
+    body = json.dumps({"content": [{"text": text}]}).encode()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
+
+
 def test_azure_provider_satisfies_protocol() -> None:
-    with patch("src.core.providers._ChatCompletionsClient"), \
-         patch("src.core.providers._AzureKeyCredential"):
-        provider = AzureFoundryProvider(
-            endpoint="https://example.azure.com", api_key="key", model="claude"
-        )
+    # AzureFoundryProvider no longer has __post_init__ — construct directly.
+    provider = AzureFoundryProvider(
+        endpoint="https://example.azure.com", api_key="key", model="claude"
+    )
     assert isinstance(provider, ModelProvider)
 
 
 def test_azure_provider_complete_calls_client() -> None:
-    with patch("src.core.providers._ChatCompletionsClient"), \
-         patch("src.core.providers._AzureKeyCredential"):
-        provider = AzureFoundryProvider(endpoint="https://example.azure.com", api_key="key", model="claude")
-    mock_client = MagicMock()
-    mock_client.complete.return_value.choices[0].message.content = "azure response"
-    object.__setattr__(provider, "_client", mock_client)
-    mock_user_message = MagicMock()
-    with patch("src.core.providers._UserMessage", return_value=mock_user_message) as mock_msg_cls:
-        result = provider.complete("test prompt")
-    mock_msg_cls.assert_called_once_with(content="test prompt")
-    mock_client.complete.assert_called_once_with(
-        messages=[mock_user_message],
-        model="claude",
+    provider = AzureFoundryProvider(
+        endpoint="https://example.azure.com/", api_key="key", model="claude"
     )
+    mock_resp = _make_azure_urlopen_mock("azure response")
+    with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+        result = provider.complete("test prompt")
+
+    mock_urlopen.assert_called_once()
+    req = mock_urlopen.call_args[0][0]
+    assert req.full_url == "https://example.azure.com/anthropic/v1/messages"
+    assert req.get_header("X-api-key") == "key"
+    sent = json.loads(req.data)
+    assert sent["model"] == "claude"
+    assert sent["messages"][0]["content"] == "test prompt"
     assert result == "azure response"
 
 
 def test_azure_provider_embed_raises() -> None:
-    with patch("src.core.providers._ChatCompletionsClient"), \
-         patch("src.core.providers._AzureKeyCredential"):
-        provider = AzureFoundryProvider(
-            endpoint="https://example.azure.com", api_key="key", model="claude"
-        )
+    provider = AzureFoundryProvider(
+        endpoint="https://example.azure.com", api_key="key", model="claude"
+    )
     with pytest.raises(NotImplementedError):
         provider.embed("text")
 
@@ -123,9 +131,8 @@ def test_provider_from_env_returns_azure(monkeypatch) -> None:
     monkeypatch.setenv("AZURE_ENDPOINT", "https://example.azure.com")
     monkeypatch.setenv("AZURE_API_KEY", "test-key")
     monkeypatch.setenv("AZURE_MODEL", "claude")
-    with patch("src.core.providers._ChatCompletionsClient"), \
-         patch("src.core.providers._AzureKeyCredential"):
-        p = provider_from_env()
+    # AzureFoundryProvider no longer calls azure-ai-inference in __init__
+    p = provider_from_env()
     assert isinstance(p, AzureFoundryProvider)
 
 

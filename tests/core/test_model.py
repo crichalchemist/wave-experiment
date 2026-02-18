@@ -77,6 +77,10 @@ def test_forward_returns_two_tensors():
     # instantiation AND the forward() call must occur inside the patch context.
     with patch("src.core.model.nn", mock_nn), patch("src.core.model.torch", mock_torch):
         reload(model_module)
+        # reload() re-executes `import torch` and `import torch.nn as nn`,
+        # overwriting both patches; re-apply them before instantiating.
+        model_module.torch = mock_torch
+        model_module.nn = mock_nn
         gpt = model_module.DetectiveGPT.__new__(model_module.DetectiveGPT)
         model_module.DetectiveGPT.__init__(gpt)
 

@@ -1,4 +1,7 @@
+import json
 import os
+import urllib.error
+import urllib.request
 from typing import Any, Protocol, runtime_checkable
 from dataclasses import dataclass, field
 
@@ -6,15 +9,6 @@ try:
     from openai import OpenAI as _OpenAI
 except ImportError:
     _OpenAI = None  # type: ignore[assignment,misc]
-
-try:
-    from azure.ai.inference import ChatCompletionsClient as _ChatCompletionsClient
-    from azure.ai.inference.models import UserMessage as _UserMessage
-    from azure.core.credentials import AzureKeyCredential as _AzureKeyCredential
-except ImportError:
-    _ChatCompletionsClient = None  # type: ignore[assignment,misc]
-    _AzureKeyCredential = None     # type: ignore[assignment,misc]
-    _UserMessage = None            # type: ignore[assignment,misc]
 
 _VLLM_DUMMY_API_KEY: str = "not-needed"  # vLLM requires non-empty key; value is ignored
 _AZURE_EMBED_NOT_SUPPORTED: str = "AzureFoundryProvider does not support embeddings"
@@ -27,6 +21,13 @@ _ENV_VLLM_MODEL: str = "VLLM_MODEL"
 _ENV_AZURE_ENDPOINT: str = "AZURE_ENDPOINT"
 _ENV_AZURE_KEY: str = "AZURE_API_KEY"
 _ENV_AZURE_MODEL: str = "AZURE_MODEL"
+
+# Critic provider — separate from the main inference provider.
+# Used in the CAI critique loop (constitutional warmup, preference pair generation).
+# Reads AZURE_CRITIC_* vars so both Ollama (local) and Azure (critic) can be set at once.
+_ENV_CRITIC_ENDPOINT: str = "AZURE_CRITIC_ENDPOINT"
+_ENV_CRITIC_KEY: str = "AZURE_CRITIC_KEY"
+_ENV_CRITIC_MODEL: str = "AZURE_CRITIC_MODEL"
 
 
 @runtime_checkable
@@ -79,33 +80,74 @@ class VLLMProvider:
 
 @dataclass(frozen=True)
 class AzureFoundryProvider:
-    """Azure AI Foundry (Claude). Used as critic model in CAI loops."""
-    endpoint: str
-    api_key: str
-    model: str
-    _client: Any = field(default=None, init=False, repr=False, compare=False)
+    """Azure AI Foundry — Anthropic-native endpoint.
 
-    def __post_init__(self) -> None:
-        if _ChatCompletionsClient is None:
-            raise ImportError("azure-ai-inference package required for AzureFoundryProvider")
-        client = _ChatCompletionsClient(
-            endpoint=self.endpoint,
-            credential=_AzureKeyCredential(self.api_key),
-        )
-        object.__setattr__(self, "_client", client)
+    Calls POST {endpoint}/anthropic/v1/messages with x-api-key auth.
+    Deployment names discovered via `az cognitiveservices account deployment list`.
+
+    Known deployments on scaffoldworker (resource group: tinkertown):
+      claude-sonnet-4-5-2 | claude-opus-4-6 | claude-haiku-4-5
+    """
+    endpoint: str   # e.g. https://scaffoldworker.services.ai.azure.com/
+    api_key: str
+    model: str      # deployment name, e.g. claude-haiku-4-5
+
+    def _messages_url(self) -> str:
+        return self.endpoint.rstrip("/") + "/anthropic/v1/messages"
 
     def complete(self, prompt: str, **kwargs) -> str:
-        response = self._client.complete(
-            messages=[_UserMessage(content=prompt)],
-            model=self.model,
+        payload = json.dumps({
+            "model": self.model,
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = urllib.request.Request(
+            self._messages_url(),
+            data=payload,
+            headers={
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            method="POST",
         )
-        content = response.choices[0].message.content
-        if content is None:
-            raise ValueError(f"Azure Foundry returned no content for model {self.model!r}")
-        return content
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                body = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(
+                f"Azure Foundry {exc.code} for model {self.model!r}: {exc.read().decode()[:200]}"
+            ) from exc
+        try:
+            return body["content"][0]["text"]
+        except (KeyError, IndexError) as exc:
+            raise ValueError(f"Unexpected response shape from Azure Foundry: {body}") from exc
 
     def embed(self, text: str) -> list[float]:
         raise NotImplementedError(_AZURE_EMBED_NOT_SUPPORTED)
+
+
+def critic_provider_from_env() -> "AzureFoundryProvider":
+    """Load Azure Foundry critic from AZURE_CRITIC_* env vars.
+
+    Separate from provider_from_env() so local Ollama inference and
+    Azure Foundry critique can be active simultaneously during CAI warmup.
+
+    Required env vars:
+      AZURE_CRITIC_ENDPOINT  — e.g. https://scaffoldworker.services.ai.azure.com/
+      AZURE_CRITIC_KEY       — Azure AI Foundry API key
+    Optional:
+      AZURE_CRITIC_MODEL     — defaults to claude-sonnet-4-5
+    """
+    endpoint = os.environ.get(_ENV_CRITIC_ENDPOINT)
+    api_key = os.environ.get(_ENV_CRITIC_KEY)
+    if not endpoint or not api_key:
+        raise ValueError(
+            f"Set {_ENV_CRITIC_ENDPOINT} and {_ENV_CRITIC_KEY} to use Azure Foundry as critic. "
+            f"Endpoint format: https://<resource>.services.ai.azure.com/"
+        )
+    model = os.environ.get(_ENV_CRITIC_MODEL, "claude-sonnet-4-5-2")
+    return AzureFoundryProvider(endpoint=endpoint, api_key=api_key, model=model)
 
 
 def provider_from_env() -> ModelProvider:
