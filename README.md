@@ -1,6 +1,6 @@
 # Detective LLM
 
-**Detective LLM** is an information gap analysis system that detects what is *absent* from investigative datasets — temporal silences, evidential voids, implied entity connections, and cognitive biases — rather than what is present. It was built for geopolitical influence networks but the epistemic framework generalises to any domain where the most significant findings are the things that were never documented.
+**Detective LLM** is an information gap analysis system that detects what is *absent* from investigative datasets — temporal silences, evidential voids, implied entity connections, and cognitive biases — rather than what is present. It was built for geopolitical influence networks but the analytical framework generalises to any domain where the most significant findings are the things that were never documented.
 
 > *"You cannot see what you cannot see. The most significant gaps may be invisible precisely because they were designed to be."*
 > — from `docs/constitution.md`
@@ -156,6 +156,8 @@ Detected injection attempts are recorded as `GapType.NORMATIVE` findings — a d
 ### Legal domain grounding
 
 The system explicitly distinguishes *law as written* (statutes, regulations, court holdings) from *law as applied* (enforcement practices, prosecutorial discretion, territorial and tribal law). Seven `LegalDomain` values are tracked; gaps between `STATUTE` and `ENFORCEMENT_PRACTICE` nodes produce `DOCTRINAL` findings. US territories and tribal nations are first-class jurisdictions, not footnotes.
+
+Legal knowledge is currently drawn from what the base model absorbed during pretraining. The extent to which statutory and regulatory text should be part of a dedicated fine-tuning pass — versus treated as background knowledge — is an open design question. A targeted SFT stage on public legal corpora (US Code, CFR, tribal treaty text) would sharpen the system's ability to identify normative and doctrinal gaps that require knowing the text of the law, not just its general contours.
 
 ---
 
@@ -315,34 +317,41 @@ Key design decisions are recorded as ADRs in `docs/vault/decisions/`:
 
 ### Vault memory
 
-Hypothesis traces and gap findings are persisted to an Obsidian-compatible Markdown vault (`docs/vault/`). Use `FileVaultClient` (filesystem) or `MCPVaultClient` (Obsidian Local REST API) — both implement the `VaultClient` Protocol.
+Hypothesis traces and gap findings are persisted to an Obsidian-compatible Markdown vault (`docs/vault/`). Two implementations are available:
+
+- **`FileVaultClient`** (`src/memory/vault.py`) — writes plain `.md` files to a directory on disk. No Obsidian required. This is the recommended mode for server and CI deployments; set `DETECTIVE_VAULT_PATH` and it works standalone.
+- **`MCPVaultClient`** (`src/memory/mcp_vault.py`) — connects to the [Obsidian Local REST API](https://github.com/coddingtonbear/obsidian-local-rest-api). Enables the full Obsidian graph view, backlink traversal, and search from the desktop app. Obsidian does not need to be installed on the server; this mode is useful when a researcher wants to browse findings interactively on a local machine pointed at the same vault directory.
+
+Both implement the `VaultClient` Protocol and are interchangeable at runtime.
 
 ---
 
 ## Data layout
 
 ```
-data/epstein/raw/          ← Raw clones of source document repositories (gitignored)
+data/epstein/raw/          ← Source document repositories (gitignored)
 data/epstein/processed/    ← Parsed Document objects (gitignored)
 data/annotations/          ← Gap/assumption annotation JSONL (gitignored)
 checkpoints/               ← Model .pt files (gitignored)
 docs/vault/                ← Obsidian vault: ADRs, hypothesis traces, gap findings
 ```
 
+The Epstein corpus (`data/epstein/`) is the primary **analysis target** — documents the system reads and interrogates for gaps at inference time. It is not training data in the conventional sense. That said, the same corpus can inform a domain-specific SFT pass if patterns in the investigative record need to be baked into the model's weights rather than retrieved at runtime. Both uses are valid; the distinction matters for deciding what goes into `data/annotations/` (supervised training labels) versus `data/epstein/processed/` (inference-time retrieval documents).
+
 ---
 
 ## Project status
 
-The core epistemic framework — gap taxonomy, assumption taxonomy, immutable hypothesis lineage, experience library, 4-layer pipeline, constitutional self-critique, injection defence, and legal domain grounding — is implemented and tested. Some capabilities (Modules B and C, full Kuzu persistence, LlamaIndex retrieval, complete training loops) are scaffolded and documented but not yet fully wired.
+The core analytical framework — gap taxonomy, assumption taxonomy, immutable hypothesis lineage, experience library, 4-layer pipeline, constitutional self-critique, injection defence, and legal domain grounding — is implemented and tested. Some capabilities (Modules B and C, full Kuzu persistence, LlamaIndex retrieval, complete training loops) are scaffolded and documented but not yet fully wired.
 
-The canonical implementation plan is `IMPLEMENTATION_PLAN.md`. The system design source of truth is `DETECTIVE_LLM_PRD.md`. The epistemic foundation is `docs/constitution.md`.
+The canonical implementation plan and system design documents are in `docs/plans/` — these are internal working documents that track research synthesis and task-by-task implementation progress, not public specifications. The living intellectual foundation is `docs/constitution.md`.
 
 ---
 
-## Epistemic foundation
+## Intellectual foundation
 
 This system is grounded in a tradition of thinkers who understood, from lived experience, that the record is never neutral:
 
-Patricia Hill Collins (standpoint epistemology), Paul Ekman (deception through omission), Isabel Wilkerson (structural silence as finding), James Baldwin (credibility resistance), bell hooks (honest analysis as care), Kelly Hayes & Mariame Kaba (gap between official narrative and community knowledge), Richard Delgado & Jean Stefancic (curated record and counter-narrative), Assata Shakur (the record as weapon), Chancellor Williams (documentary suppression on a civilisational scale).
+Patricia Hill Collins (standpoint knowledge; who gets to decide what counts as evidence), Paul Ekman (deception through omission; the hundred-thousand shapes of falsehood — including through micro-expression, a direction that opens toward vision-service integration for video and recorded testimony), Isabel Wilkerson (structural silence as finding; the evil of silence), James Baldwin (credibility resistance — being disbelieved precisely because what you said was true), bell hooks (honest analysis as an act of care, not aggression), Kelly Hayes & Mariame Kaba (the gap between official narrative and the knowledge held by those most affected), Richard Delgado & Jean Stefancic (the curated record; counter-narrative as valid evidence), Assata Shakur (the record used as a weapon against the documented), Chancellor Williams (documentary suppression across a civilisational horizon).
 
-These are not decorative citations. They are the epistemic architecture of the detection system. See `docs/constitution.md` for the full moral compass.
+These are not decorative citations. They are the load-bearing structure of the detection logic. See `docs/constitution.md` for the full moral compass.
