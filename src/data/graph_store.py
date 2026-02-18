@@ -47,6 +47,8 @@ class GraphStore(Protocol):
         self, source: str, target: str, max_hops: int = 3
     ) -> list[PathResult]: ...
 
+    def successors(self, entity: str) -> list[str]: ...
+
 
 # ---------------------------------------------------------------------------
 # InMemoryGraph — Protocol-conforming, mutable, networkx-backed
@@ -95,6 +97,17 @@ class InMemoryGraph:
         algorithm lives in exactly one place — knowledge_graph.py.
         """
         return n_hop_paths(self._graph, source, target, max_hops)
+
+    def successors(self, entity: str) -> list[str]:
+        """
+        Return immediate successor node IDs (1-hop outgoing neighbours).
+
+        Returns an empty list when the entity is absent — absence is
+        investigatively meaningful and should not raise an error.
+        """
+        if entity not in self._graph:
+            return []
+        return list(self._graph.successors(entity))
 
 
 # ---------------------------------------------------------------------------

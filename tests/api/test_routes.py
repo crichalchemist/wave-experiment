@@ -21,8 +21,9 @@ from src.api.routes import create_app  # noqa: E402
 # Shared client fixture
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def client() -> TestClient:
+    """Fresh app per test — avoids cross-test state bleed from the InMemoryGraph."""
     app = create_app()
     return TestClient(app)
 
@@ -37,19 +38,14 @@ def test_analyze_status_200(client: TestClient) -> None:
     assert response.status_code == 200
 
 
-def test_analyze_endpoint_returns_verdict(client: TestClient) -> None:
-    """Response body contains verdict and confidence."""
+def test_analyze_response_shape_and_value_types(client: TestClient) -> None:
+    """Data minimization: exactly verdict (str), confidence (float in [0,1]), evidence_count (int)."""
     response = client.post("/analyze", json={"claim": "Entity A was active in 2013"})
     body = response.json()
-    assert "verdict" in body
-    assert "confidence" in body
-
-
-def test_analyze_response_has_minimum_fields(client: TestClient) -> None:
-    """Data minimization: response carries exactly verdict, confidence, gaps_found."""
-    response = client.post("/analyze", json={"claim": "Entity A was active in 2013"})
-    body = response.json()
-    assert set(body.keys()) == {"verdict", "confidence", "gaps_found"}
+    assert set(body.keys()) == {"verdict", "confidence", "evidence_count"}
+    assert isinstance(body["verdict"], str) and body["verdict"]
+    assert 0.0 <= body["confidence"] <= 1.0
+    assert isinstance(body["evidence_count"], int)
 
 
 def test_analyze_missing_claim_returns_422(client: TestClient) -> None:
@@ -84,7 +80,7 @@ def test_network_unknown_entity_returns_empty_list(client: TestClient) -> None:
 # /evolve
 # ---------------------------------------------------------------------------
 
-def test_evolve_endpoint_returns_hypothesis(client: TestClient) -> None:
+def test_evolve_response_shape(client: TestClient) -> None:
     """Data minimization: /evolve response carries exactly hypothesis_id, statement, confidence."""
     response = client.post("/evolve", json={"evidence_path": "new evidence text"})
     assert response.status_code == 200

@@ -161,6 +161,27 @@ def test_summarise_returns_evaluation_summary() -> None:
     assert hasattr(result, "f1")
 
 
+def test_precision_empty() -> None:
+    assert precision([]) == pytest.approx(0.0)
+
+
+def test_recall_empty() -> None:
+    assert recall([]) == pytest.approx(0.0)
+
+
+def test_f1_score_empty() -> None:
+    assert f1_score([]) == pytest.approx(0.0)
+
+
+def test_summarise_empty() -> None:
+    summary = summarise([])
+    assert summary.total == 0
+    assert summary.discovery_rate == pytest.approx(0.0)
+    assert summary.precision == pytest.approx(0.0)
+    assert summary.recall == pytest.approx(0.0)
+    assert summary.f1 == pytest.approx(0.0)
+
+
 def test_summarise_fields_match_individual_functions() -> None:
     items = [
         _make("g1", independently_discovered=True, matches_system=True),

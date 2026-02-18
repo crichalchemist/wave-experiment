@@ -8,6 +8,13 @@ The module degrades gracefully when fastapi/pydantic are not installed —
 FastAPI and BaseModel are set to None, app is None, and callers that
 import only create_app() will receive None, leaving the rest of the
 package unaffected.
+
+Note: when fastapi IS installed, the module-level `app = create_app()`
+at the bottom of this file executes on every import. That call invokes
+`graph_store_from_env()` which reads environment variables. This is
+intentional — it enables `uvicorn src.api.routes:app` ASGI entry-point
+convention. In test code, always use `create_app()` via a fresh fixture
+to avoid shared state between test runs.
 """
 from __future__ import annotations
 
@@ -52,7 +59,7 @@ if BaseModel is not None:
     class AnalyzeResponse(BaseModel):  # type: ignore[valid-type]
         verdict: str
         confidence: float
-        gaps_found: int  # number of evidence items found — a proxy for gap count
+        evidence_count: int  # number of evidence nodes retrieved — not gap count
 
     class NetworkResponse(BaseModel):  # type: ignore[valid-type]
         entity: str
@@ -123,7 +130,7 @@ def create_app() -> "FastAPI":  # type: ignore[name-defined]
         return AnalyzeResponse(
             verdict=result.verdict,
             confidence=result.confidence,
-            gaps_found=len(result.evidence),
+            evidence_count=len(result.evidence),
         )
 
     # ------------------------------------------------------------------
@@ -140,13 +147,7 @@ def create_app() -> "FastAPI":  # type: ignore[name-defined]
         absence is investigatively significant and should not raise an error.
         """
         graph = graph_store_from_env()
-
-        neighbours: list[str] = []
-        if hasattr(graph, "_graph"):
-            nx_graph = graph._graph  # type: ignore[union-attr]
-            if entity in nx_graph:
-                neighbours = list(nx_graph.successors(entity))
-
+        neighbours = graph.successors(entity)
         return NetworkResponse(entity=entity, relationships=neighbours)
 
     # ------------------------------------------------------------------

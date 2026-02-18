@@ -95,7 +95,7 @@ def f1_score(items: Sequence[DiscoveryEvaluation]) -> float:
     p = precision(items)
     r = recall(items)
     denominator = p + r
-    if denominator == _ZERO_DENOMINATOR_FALLBACK:
+    if not denominator:
         return _ZERO_DENOMINATOR_FALLBACK
     return _F1_MULTIPLIER * (p * r) / denominator
 
