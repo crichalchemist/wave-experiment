@@ -25,7 +25,7 @@ except ImportError:
     FastAPI = None  # type: ignore[assignment,misc]
     BaseModel = None  # type: ignore[assignment]
 
-from src.core.providers import MockProvider
+from src.core.providers import MockProvider, ModelProvider, provider_from_env
 from src.data.graph_store import GraphStore, graph_store_from_env
 from src.detective.experience import EMPTY_LIBRARY
 from src.detective.evolution import evolve_hypothesis
@@ -87,7 +87,10 @@ else:
 # ---------------------------------------------------------------------------
 
 
-def create_app(graph: "GraphStore | None" = None) -> "FastAPI":  # type: ignore[name-defined]
+def create_app(
+    graph: "GraphStore | None" = None,
+    provider: "ModelProvider | None" = None,
+) -> "FastAPI":  # type: ignore[name-defined]
     """
     Build and return the FastAPI application instance.
 
@@ -95,14 +98,25 @@ def create_app(graph: "GraphStore | None" = None) -> "FastAPI":  # type: ignore[
     tests to create isolated instances and avoids shared global state between
     test runs.
 
-    graph: optional pre-built GraphStore.  When None, graph_store_from_env()
-    is called once at app-creation time.  All three route handlers share the
-    same graph instance via closure — they do NOT create a new store per request.
+    graph:    optional pre-built GraphStore.  When None, graph_store_from_env()
+              is called once at app-creation time.
+    provider: optional ModelProvider.  When None, provider_from_env() is tried
+              first; falls back to MockProvider when env vars are not configured
+              (safe for tests and local dev without a running Ollama instance).
+    All route handlers share the same provider instance via closure.
     """
     if FastAPI is None:
         raise ImportError("fastapi is required to create the Detective LLM API app.")
 
     _graph: GraphStore = graph if graph is not None else graph_store_from_env()
+
+    if provider is not None:
+        _provider: ModelProvider = provider
+    else:
+        try:
+            _provider = provider_from_env()
+        except (ValueError, KeyError, ImportError):
+            _provider = MockProvider(response=_API_MOCK_RESPONSE)
 
     app = FastAPI(title=API_TITLE, version=API_VERSION)
 
@@ -119,14 +133,13 @@ def create_app(graph: "GraphStore | None" = None) -> "FastAPI":  # type: ignore[
         The full AnalysisResult (including reasoning chain, intent, raw evidence)
         is deliberately not surfaced — consumers receive only what they act on.
         """
-        provider = MockProvider(response=_API_MOCK_RESPONSE)
         # No constitution wired at API layer; verify_inline falls back to
         # the default principle when constitution lacks a .critique() method.
         constitution = object()
 
         result = analyze(
             claim=request.claim,
-            provider=provider,
+            provider=_provider,
             graph=_graph,
             library=EMPTY_LIBRARY,
             constitution=constitution,
@@ -170,8 +183,6 @@ def create_app(graph: "GraphStore | None" = None) -> "FastAPI":  # type: ignore[
 
         Data minimized to: hypothesis_id, statement, confidence.
         """
-        provider = MockProvider(response=_API_MOCK_RESPONSE)
-
         base = Hypothesis.create(
             text=request.evidence_path,
             confidence=_INITIAL_HYPOTHESIS_CONFIDENCE,
@@ -181,7 +192,7 @@ def create_app(graph: "GraphStore | None" = None) -> "FastAPI":  # type: ignore[
             hypothesis=base,
             new_evidence=request.evidence_path,
             library=EMPTY_LIBRARY,
-            provider=provider,
+            provider=_provider,
         )
 
         return EvolveResponse(
