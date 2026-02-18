@@ -21,7 +21,7 @@ _REWRITE_PROMPT: str = (
 
 
 def _rewrite(analysis: str, provider: ModelProvider) -> str:
-    """Ask provider to rewrite the analysis. Pure function (no side effects)."""
+    """Ask provider to rewrite the analysis. All I/O through injected provider — no hidden side effects."""
     return provider.complete(_REWRITE_PROMPT.format(analysis=analysis))
 
 
