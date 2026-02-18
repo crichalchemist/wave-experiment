@@ -85,9 +85,14 @@ def test_network_unknown_entity_returns_empty_list(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 def test_evolve_endpoint_returns_hypothesis(client: TestClient) -> None:
-    """POST /evolve returns hypothesis_id and statement in response body."""
+    """Data minimization: /evolve response carries exactly hypothesis_id, statement, confidence."""
     response = client.post("/evolve", json={"evidence_path": "new evidence text"})
     assert response.status_code == 200
     body = response.json()
-    assert "hypothesis_id" in body
-    assert "statement" in body
+    assert set(body.keys()) == {"hypothesis_id", "statement", "confidence"}
+
+
+def test_evolve_missing_evidence_path_returns_422(client: TestClient) -> None:
+    """Missing required field triggers Pydantic validation → 422 Unprocessable Entity."""
+    response = client.post("/evolve", json={})
+    assert response.status_code == 422
