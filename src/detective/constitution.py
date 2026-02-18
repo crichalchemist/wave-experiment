@@ -40,8 +40,8 @@ class PreferencePair:
     rejected is the original that failed the critique.
     """
     instruction: str
-    chosen: str     # revised analysis — learned from mentor guidance
     rejected: str   # original analysis — failed the critique
+    chosen: str     # revised analysis — learned from mentor guidance
 
 
 def generate_preference_pair(
