@@ -235,7 +235,7 @@ detective critique "Entity A controlled the network." --constitution docs/consti
 `microgpt.py` is a self-contained, dependency-free GPT implementation in ~200 lines of pure Python. It is the algorithmic foundation of the project — read it first to understand the core mechanism before reading `src/core/model.py`.
 
 ```bash
-# Downloads names.txt if absent, trains for 1000 steps, then generates samples
+# Downloads input.txt if absent, trains for 1000 steps, then generates samples
 python microgpt.py
 ```
 
