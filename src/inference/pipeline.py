@@ -187,32 +187,23 @@ def retrieve_evidence(intent: AnalyticalIntent, graph: GraphStore) -> list[Evide
 
 def _extract_graph_nodes(graph: GraphStore) -> list[str]:
     """
-    Extract all node IDs from a graph store.
+    Extract all node IDs via the GraphStore Protocol's nodes() method.
 
-    Uses the private networkx DiGraph on InMemoryGraph when available —
-    this is a deliberate coupling to the concrete type for in-process use.
-    The alternative (iterating n_hop_paths over all permutations) would be O(V^2).
+    Delegates to the Protocol rather than touching any private attribute —
+    this keeps all backends (InMemoryGraph, KuzuGraph, etc.) on equal footing.
     """
-    if hasattr(graph, "_graph"):
-        # InMemoryGraph: direct networkx access
-        return list(graph._graph.nodes())  # type: ignore[union-attr]
-    # Fallback for unknown backends: return empty (caller handles gracefully)
-    return []
+    return graph.nodes()
 
 
 def _build_neighbour_map(
     graph: GraphStore, nodes: list[str]
 ) -> dict[str, set[str]]:
     """
-    Build a node → immediate successors mapping using the networkx graph when available.
+    Build a node → immediate successors mapping via the GraphStore Protocol.
 
-    Keeps the traversal logic isolated so _extract_graph_nodes and retrieve_evidence
-    each stay focused on a single responsibility.
+    Uses successors() so all backends participate without private-attribute access.
     """
-    if not hasattr(graph, "_graph"):
-        return {}
-    nx_graph = graph._graph  # type: ignore[union-attr]
-    return {node: set(nx_graph.successors(node)) for node in nodes}
+    return {node: set(graph.successors(node)) for node in nodes}
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +263,7 @@ def verify_inline(
     chain: ReasoningChain,
     provider: ModelProvider,
     constitution: object,
+    evidence: tuple[Evidence, ...] = (),
 ) -> AnalysisResult:
     """
     Apply a constitutional reflection trigger to the reasoning chain, then score confidence.
@@ -305,12 +297,10 @@ def verify_inline(
     n_steps = len(chain.steps)
     confidence = n_steps / (n_steps + _CONFIDENCE_DENOMINATOR_OFFSET)
 
-    # Collect all evidence seen during this analysis (empty at this layer;
-    # the top-level analyze function populates it).
     return AnalysisResult(
         claim=intent.claim,
         intent=intent,
-        evidence=(),  # populated by analyze()
+        evidence=evidence,
         reasoning=chain,
         verdict=verdict,
         confidence=confidence,
@@ -340,14 +330,4 @@ def analyze(
     intent = parse_intent(claim)
     evidence = retrieve_evidence(intent, graph)
     chain = fuse_reasoning(evidence, provider)
-    partial_result = verify_inline(intent, chain, provider, constitution)
-
-    # Replace the empty evidence tuple with the actual evidence from Layer 2
-    return AnalysisResult(
-        claim=partial_result.claim,
-        intent=partial_result.intent,
-        evidence=tuple(evidence),
-        reasoning=partial_result.reasoning,
-        verdict=partial_result.verdict,
-        confidence=partial_result.confidence,
-    )
+    return verify_inline(intent, chain, provider, constitution, evidence=tuple(evidence))

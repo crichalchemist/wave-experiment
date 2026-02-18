@@ -26,7 +26,7 @@ except ImportError:
     BaseModel = None  # type: ignore[assignment]
 
 from src.core.providers import MockProvider
-from src.data.graph_store import graph_store_from_env
+from src.data.graph_store import GraphStore, graph_store_from_env
 from src.detective.experience import EMPTY_LIBRARY
 from src.detective.evolution import evolve_hypothesis
 from src.detective.hypothesis import Hypothesis
@@ -87,16 +87,22 @@ else:
 # ---------------------------------------------------------------------------
 
 
-def create_app() -> "FastAPI":  # type: ignore[name-defined]
+def create_app(graph: "GraphStore | None" = None) -> "FastAPI":  # type: ignore[name-defined]
     """
     Build and return the FastAPI application instance.
 
     Registering routes inside a factory rather than at module scope allows
     tests to create isolated instances and avoids shared global state between
     test runs.
+
+    graph: optional pre-built GraphStore.  When None, graph_store_from_env()
+    is called once at app-creation time.  All three route handlers share the
+    same graph instance via closure — they do NOT create a new store per request.
     """
     if FastAPI is None:
         raise ImportError("fastapi is required to create the Detective LLM API app.")
+
+    _graph: GraphStore = graph if graph is not None else graph_store_from_env()
 
     app = FastAPI(title=API_TITLE, version=API_VERSION)
 
@@ -113,7 +119,6 @@ def create_app() -> "FastAPI":  # type: ignore[name-defined]
         The full AnalysisResult (including reasoning chain, intent, raw evidence)
         is deliberately not surfaced — consumers receive only what they act on.
         """
-        graph = graph_store_from_env()
         provider = MockProvider(response=_API_MOCK_RESPONSE)
         # No constitution wired at API layer; verify_inline falls back to
         # the default principle when constitution lacks a .critique() method.
@@ -122,7 +127,7 @@ def create_app() -> "FastAPI":  # type: ignore[name-defined]
         result = analyze(
             claim=request.claim,
             provider=provider,
-            graph=graph,
+            graph=_graph,
             library=EMPTY_LIBRARY,
             constitution=constitution,
         )
@@ -146,8 +151,7 @@ def create_app() -> "FastAPI":  # type: ignore[name-defined]
         If the entity is not in the graph, relationships is an empty list —
         absence is investigatively significant and should not raise an error.
         """
-        graph = graph_store_from_env()
-        neighbours = graph.successors(entity)
+        neighbours = _graph.successors(entity)
         return NetworkResponse(entity=entity, relationships=neighbours)
 
     # ------------------------------------------------------------------

@@ -154,7 +154,7 @@ def test_reflection_trigger_integrates_with_pipeline() -> None:
 
     result = inject_reflection_trigger(original_text, principle)
 
-    assert "Wait" in result
+    assert REFLECTION_TRIGGER in result
     assert principle in result
     assert original_text in result  # full original text body is preserved verbatim
 

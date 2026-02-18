@@ -46,7 +46,12 @@ class DiscoveryEvaluation:
 # ---------------------------------------------------------------------------
 
 def discovery_rate(items: Sequence[DiscoveryEvaluation]) -> float:
-    """Fraction of records where the system found the gap (matches_system=True).
+    """Fraction of all records where the system found the gap (matches_system=True).
+
+    This is NOT recall — the denominator is the total number of records, not just
+    the expert-discovered ones.  A system that reports everything achieves 1.0 here
+    even if no expert independently confirmed the gaps.  Use recall() to measure
+    how many expert-discovered gaps the system captured.
 
     Returns EMPTY_EVAL_DISCOVERY_RATE when the sequence is empty so callers
     never receive a ZeroDivisionError.

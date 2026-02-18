@@ -161,6 +161,39 @@ def test_n_hop_paths_missing_node_returns_empty(tmp_path: pytest.TempPathFactory
 
 
 @kuzu_available
+def test_successors_returns_direct_neighbours(tmp_path: pytest.TempPathFactory) -> None:
+    """successors() returns 1-hop outgoing neighbours for a known entity."""
+    from src.data.kuzu_graph import KuzuGraph
+
+    g = KuzuGraph(db_path=str(tmp_path / "db"))
+    g.add_edge("A", "B", RelationType.CAUSAL, 0.9)
+    g.add_edge("A", "C", RelationType.SEQUENTIAL, 0.7)
+
+    assert sorted(g.successors("A")) == ["B", "C"]
+
+
+@kuzu_available
+def test_successors_missing_entity_returns_empty(tmp_path: pytest.TempPathFactory) -> None:
+    """successors() returns [] for an entity not in the graph — absence is meaningful."""
+    from src.data.kuzu_graph import KuzuGraph
+
+    g = KuzuGraph(db_path=str(tmp_path / "db"))
+    assert g.successors("Nonexistent") == []
+
+
+@kuzu_available
+def test_nodes_returns_all_node_ids(tmp_path: pytest.TempPathFactory) -> None:
+    """nodes() returns every node ID stored, regardless of edge direction."""
+    from src.data.kuzu_graph import KuzuGraph
+
+    g = KuzuGraph(db_path=str(tmp_path / "db"))
+    g.add_edge("A", "B", RelationType.CAUSAL, 0.9)
+    g.add_edge("B", "C", RelationType.SEQUENTIAL, 0.8)
+
+    assert sorted(g.nodes()) == ["A", "B", "C"]
+
+
+@kuzu_available
 def test_graph_store_from_env_kuzu_backend(
     tmp_path: pytest.TempPathFactory,
     monkeypatch: pytest.MonkeyPatch,

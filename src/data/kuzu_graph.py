@@ -146,6 +146,38 @@ class KuzuGraph:
             hop_count=1,
         )
 
+    def successors(self, entity: str) -> list[str]:
+        """
+        Return immediate successor node IDs (1-hop outgoing neighbours).
+
+        Probes for entity existence first — Kuzu raises on missing nodes rather
+        than returning an empty result, so a cheap existence check is cheaper
+        than catching the error.
+        """
+        probe = self._conn.execute(
+            f"MATCH (n:{_NODE_TABLE}) WHERE n.id = $id RETURN n.id",
+            {"id": entity},
+        )
+        if not probe.has_next():
+            return []
+        result = self._conn.execute(
+            f"MATCH (s:{_NODE_TABLE})-[:{_EDGE_TABLE}]->(t:{_NODE_TABLE}) "
+            f"WHERE s.id = $src RETURN t.id",
+            {"src": entity},
+        )
+        out: list[str] = []
+        while result.has_next():
+            out.append(result.get_next()[0])
+        return out
+
+    def nodes(self) -> list[str]:
+        """Return all node IDs currently stored in the database."""
+        result = self._conn.execute(f"MATCH (n:{_NODE_TABLE}) RETURN n.id")
+        out: list[str] = []
+        while result.has_next():
+            out.append(result.get_next()[0])
+        return out
+
     def close(self) -> None:
         """Release the Kuzu connection and database handles."""
         self._conn.close()

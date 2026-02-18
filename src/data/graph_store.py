@@ -49,6 +49,8 @@ class GraphStore(Protocol):
 
     def successors(self, entity: str) -> list[str]: ...
 
+    def nodes(self) -> list[str]: ...
+
 
 # ---------------------------------------------------------------------------
 # InMemoryGraph — Protocol-conforming, mutable, networkx-backed
@@ -108,6 +110,10 @@ class InMemoryGraph:
         if entity not in self._graph:
             return []
         return list(self._graph.successors(entity))
+
+    def nodes(self) -> list[str]:
+        """Return all node IDs in the graph."""
+        return list(self._graph.nodes())
 
 
 # ---------------------------------------------------------------------------

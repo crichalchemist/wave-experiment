@@ -45,7 +45,7 @@ def test_analyze_response_shape_and_value_types(client: TestClient) -> None:
     assert set(body.keys()) == {"verdict", "confidence", "evidence_count"}
     assert isinstance(body["verdict"], str) and body["verdict"]
     assert 0.0 <= body["confidence"] <= 1.0
-    assert isinstance(body["evidence_count"], int)
+    assert isinstance(body["evidence_count"], int) and body["evidence_count"] >= 0
 
 
 def test_analyze_missing_claim_returns_422(client: TestClient) -> None:
