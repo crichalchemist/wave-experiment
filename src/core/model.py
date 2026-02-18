@@ -19,10 +19,13 @@ try:
     import torch.nn as nn
 except ImportError:
     # Only reset to None if not already injected (e.g. by a test mock via patch + reload).
-    # This lets `patch("src.core.model.nn", mock)` survive importlib.reload().
+    # importlib.reload() re-executes in the existing namespace, so the patched value is
+    # visible via sys.modules.get(__name__) — the guard lets mocks survive reload().
     _current = sys.modules.get(__name__)
+    _current_torch = getattr(_current, "torch", None) if _current is not None else None
     _current_nn = getattr(_current, "nn", None) if _current is not None else None
-    torch = None  # type: ignore[assignment]
+    if _current_torch is None:
+        torch = None  # type: ignore[assignment]
     if _current_nn is None:
         nn = None  # type: ignore[assignment]
 

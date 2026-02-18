@@ -64,19 +64,34 @@ def test_lm_head_and_gap_head_are_independent():
 
 
 def test_forward_returns_two_tensors():
-    """forward() must return a 2-tuple (lm_logits, gap_logits)."""
-    mock_lm = MagicMock()
-    mock_lm.shape = (2, 8, 256)
-    mock_gap = MagicMock()
-    mock_gap.shape = (2, 8, 5)
+    """DetectiveGPT.forward must return a 2-tuple and call both lm_head and gap_head."""
+    from importlib import reload
+    import src.core.model as model_module
 
-    class _MockGPT:
-        def forward(self, x):
-            return mock_lm, mock_gap
+    mock_nn, _ = _make_mock_nn()
+    mock_torch = MagicMock()
+    # arange(...).unsqueeze(0) is called in forward for positions
+    mock_torch.arange.return_value.unsqueeze.return_value = MagicMock()
 
-    lm, gap = _MockGPT().forward(MagicMock())
-    assert lm.shape == (2, 8, 256)
-    assert gap.shape == (2, 8, 5)
+    # forward reads torch from the module namespace at call time, so both
+    # instantiation AND the forward() call must occur inside the patch context.
+    with patch("src.core.model.nn", mock_nn), patch("src.core.model.torch", mock_torch):
+        reload(model_module)
+        gpt = model_module.DetectiveGPT.__new__(model_module.DetectiveGPT)
+        model_module.DetectiveGPT.__init__(gpt)
+
+        # mock input: shape must unpack as (batch, seq_len)
+        mock_x = MagicMock()
+        mock_x.shape = (2, 8)
+
+        result = gpt.forward(mock_x)  # called inside patch context
+
+    # The real DetectiveGPT.forward must return a 2-tuple
+    assert isinstance(result, tuple), "forward() must return a tuple"
+    assert len(result) == 2, "forward() must return exactly 2 elements (lm_logits, gap_logits)"
+    # Both heads must have been invoked
+    gpt.lm_head.assert_called_once()
+    gpt.gap_head.assert_called_once()
 
 
 def test_gap_logits_last_dim_matches_n_gap_types():
