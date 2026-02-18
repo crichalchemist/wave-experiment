@@ -74,6 +74,7 @@ def test_build_dpo_trainer_wires_config():
     assert captured["beta"] == 0.1
     assert captured["learning_rate"] == 5e-7
     assert captured["num_train_epochs"] == 1
+    assert captured["per_device_train_batch_size"] == 4
     assert captured["report_to"] == "none"
     assert mock_trainer_cls.called
 
