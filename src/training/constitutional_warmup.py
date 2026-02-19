@@ -28,6 +28,10 @@ from pathlib import Path
 from typing import Any
 
 from src.detective.constitution import load_constitution, generate_preference_pair
+from src.inference.welfare_scoring import (
+    infer_threatened_constructs,
+    score_hypothesis_welfare,
+)
 
 _ANALYSIS_PROMPT = (
     "You are an investigative analyst trained in information gap detection.\n\n"
@@ -37,6 +41,49 @@ _ANALYSIS_PROMPT = (
     "normative, or doctrinal) and why its absence is significant.\n\n"
     "Document:\n{text}"
 )
+
+
+def should_include_example(
+    document_text: str,
+    phi_metrics: dict[str, float],
+    welfare_threshold: float = 0.3,
+) -> bool:
+    """
+    Filter training examples by welfare relevance.
+
+    Only include examples that threaten at least one Φ construct with
+    welfare_relevance > threshold.
+
+    This focuses constitutional training on welfare-relevant reasoning,
+    improving data efficiency and alignment with Detective LLM's mission.
+
+    Args:
+        document_text: Source document text to evaluate
+        phi_metrics: Current Φ construct levels
+        welfare_threshold: Minimum welfare_relevance to include (default 0.3)
+
+    Returns:
+        True if example should be included in training set
+    """
+    constructs = infer_threatened_constructs(document_text)
+
+    if not constructs:
+        return False  # Not welfare-relevant
+
+    # Create pseudo-hypothesis for scoring
+    from src.detective.hypothesis import Hypothesis
+    from datetime import datetime
+    pseudo_hyp = Hypothesis(
+        id="filter",
+        text=document_text[:500],  # first 500 chars for keyword matching
+        confidence=0.5,
+        timestamp=datetime.now(),
+        threatened_constructs=constructs,
+    )
+
+    welfare_score = score_hypothesis_welfare(pseudo_hyp, phi_metrics)
+
+    return welfare_score >= welfare_threshold
 
 
 @dataclass(frozen=True)
@@ -104,14 +151,28 @@ def run_constitutional_warmup(
     constitution = load_constitution(Path(cfg.constitution_path))
     examples = _load_all_sources(cfg)
 
+    # Initialize phi_metrics (all constructs at baseline 0.5)
+    phi_metrics = {
+        "c": 0.5,      # Epistemic confidence
+        "lam": 0.5,    # Transparency
+        "d": 0.5,      # Democratic legitimacy
+        "s": 0.5,      # Stability
+    }
+
     output_path = Path(cfg.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     count = 0
+    filtered_count = 0
     with output_path.open("w", encoding="utf-8") as f:
         for example in examples:
             text = example.get("text", "").strip()
             if not text:
+                continue
+
+            # Apply welfare filter before expensive CAI processing
+            if not should_include_example(text, phi_metrics, welfare_threshold=0.3):
+                filtered_count += 1
                 continue
 
             instruction = _ANALYSIS_PROMPT.format(text=text[:2000])  # context window budget
