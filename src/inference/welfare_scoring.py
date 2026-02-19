@@ -137,7 +137,7 @@ def score_hypothesis_welfare(
     Examples:
         >>> h = Hypothesis.create("Temporal gap in financial records 2013-2017", 0.8)
         >>> h = replace(h, threatened_constructs=("c",))
-        >>> score_hypothesis_welfare(h, {"c": 0.2})  # care is scarce
+        >>> score_hypothesis_welfare(h, {"c": 0.1})  # care is scarce
         0.58  # high welfare relevance
         >>> score_hypothesis_welfare(h, {"c": 0.9})  # care is abundant
         0.14  # low welfare relevance
@@ -161,6 +161,9 @@ def score_hypothesis_welfare(
     # k=1.0 means score→0.5 when gradient_sum=1.0
     # With max single gradient ≈ 1.43 at x=0.1, score≈0.59
     # With gradient ≈ 0.71 at x=0.2, score≈0.42
+    # Using k=1.0 instead of spec's k=10.0 for better discrimination:
+    # k=1.0 spreads typical gradients (0.1-1.5) across [0.09, 0.60] score range,
+    # while k=10.0 compressed them into [0.01, 0.13], making prioritization difficult
     k = 1.0
     normalized = gradient_sum / (gradient_sum + k)
 
