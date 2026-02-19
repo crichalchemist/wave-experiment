@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+1#!/usr/bin/env python3
 """Run constitutional warmup with welfare filtering."""
 
 import os
@@ -43,14 +43,21 @@ def main():
 
     # Configure warmup
     output_path = "data/training/constitutional_pairs_test.jsonl"
+    document_file = "data/training/warmup_test_data.txt"
+
     config = ConstitutionalWarmupConfig(
         output_path=output_path,
         max_examples=5,  # Small test run
         constitution_path="docs/constitution.md",
+        document_file=document_file,  # NEW: Load from test data file
+        use_huggingface=False,  # Disable external sources for testing
+        use_doj=False,
+        use_international=False,
     )
 
     print("Configuration:")
     print(f"  Output: {output_path}")
+    print(f"  Document file: {document_file}")
     print(f"  Max examples: {config.max_examples}")
     print(f"  Constitution: {config.constitution_path}")
     print(f"\nWelfare filtering enabled:")

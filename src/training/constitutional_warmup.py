@@ -96,6 +96,7 @@ class ConstitutionalWarmupConfig:
     use_huggingface: bool = True
     use_doj: bool = True
     use_international: bool = True
+    document_file: str | None = None  # NEW: Simple text file with one document per line
     hf_datasets: tuple[str, ...] = (
         "pile-of-law/pile-of-law",
         "nguha/legalbench",
@@ -107,6 +108,23 @@ def _load_all_sources(cfg: ConstitutionalWarmupConfig) -> list[dict[str, Any]]:
     """Aggregate examples from all enabled source pipelines."""
     examples: list[dict[str, Any]] = []
     per_source = max(1, cfg.max_examples // 3)
+
+    # NEW: Load from simple document file if provided
+    if cfg.document_file:
+        try:
+            with open(cfg.document_file, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i >= cfg.max_examples:
+                        break
+                    text = line.strip()
+                    if text:
+                        examples.append({
+                            "text": text,
+                            "source": cfg.document_file,
+                            "metadata": {"line": i + 1}
+                        })
+        except Exception as e:
+            pass  # File not found or read error - continue with other sources
 
     if cfg.use_huggingface:
         from src.data.sourcing.hf_loader import load_hf_legal_batch
@@ -153,10 +171,13 @@ def run_constitutional_warmup(
 
     # Initialize phi_metrics (all constructs at baseline 0.5)
     phi_metrics = {
-        "c": 0.5,      # Epistemic confidence
-        "lam": 0.5,    # Transparency
-        "d": 0.5,      # Democratic legitimacy
-        "s": 0.5,      # Stability
+        "c": 0.5,      # care (resource allocation)
+        "kappa": 0.5,  # compassion (responsive support)
+        "j": 0.5,      # joy (positive affect)
+        "p": 0.5,      # purpose (goal alignment)
+        "eps": 0.5,    # empathy (perspective-taking)
+        "lam": 0.5,    # protection (safeguarding)
+        "xi": 0.5,     # truth (epistemic integrity)
     }
 
     output_path = Path(cfg.output_path)
@@ -194,5 +215,13 @@ def run_constitutional_warmup(
                 "metadata": example.get("metadata", {}),
             }) + "\n")
             count += 1
+
+            if count >= cfg.max_examples:
+                break
+
+    # Report filtering statistics to stderr
+    import sys
+    print(f"\nWelfare filtering: {filtered_count} examples excluded (below threshold)", file=sys.stderr)
+    print(f"Generated: {count} preference pairs", file=sys.stderr)
 
     return count
