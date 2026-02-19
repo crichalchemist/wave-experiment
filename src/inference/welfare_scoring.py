@@ -113,3 +113,55 @@ def phi_gradient_wrt(construct: str, metrics: Dict[str, float]) -> float:
     x_clamped = max(0.01, min(1.0, x))
 
     return theta / x_clamped
+
+
+def score_hypothesis_welfare(
+    hypothesis: "Hypothesis",  # type: ignore - import at runtime to avoid circular
+    phi_metrics: Dict[str, float],
+) -> float:
+    """
+    Compute welfare relevance score for a hypothesis.
+
+    Score = Σ(Φ_gradient) for each threatened construct, normalized to [0, 1].
+
+    A hypothesis about resource allocation gaps when care (c) is scarce
+    gets high welfare relevance due to high ∂Φ/∂c gradient.
+
+    Args:
+        hypothesis: Hypothesis to score
+        phi_metrics: Current Φ construct levels
+
+    Returns:
+        Welfare relevance in [0, 1]
+
+    Examples:
+        >>> h = Hypothesis.create("Temporal gap in financial records 2013-2017", 0.8)
+        >>> h = replace(h, threatened_constructs=("c",))
+        >>> score_hypothesis_welfare(h, {"c": 0.2})  # care is scarce
+        0.58  # high welfare relevance
+        >>> score_hypothesis_welfare(h, {"c": 0.9})  # care is abundant
+        0.14  # low welfare relevance
+    """
+    if not hypothesis.threatened_constructs:
+        # Infer on first call if not already set
+        constructs = infer_threatened_constructs(hypothesis.text)
+    else:
+        constructs = hypothesis.threatened_constructs
+
+    if not constructs:
+        return 0.0  # No welfare threat detected
+
+    gradient_sum = sum(
+        phi_gradient_wrt(construct, phi_metrics)
+        for construct in constructs
+    )
+
+    # Normalize to [0, 1] using soft saturation
+    # score = gradient_sum / (gradient_sum + k)
+    # k=1.0 means score→0.5 when gradient_sum=1.0
+    # With max single gradient ≈ 1.43 at x=0.1, score≈0.59
+    # With gradient ≈ 0.71 at x=0.2, score≈0.42
+    k = 1.0
+    normalized = gradient_sum / (gradient_sum + k)
+
+    return min(1.0, max(0.0, normalized))
