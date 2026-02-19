@@ -21,7 +21,8 @@ Expressing ethical-affective phenomena as an "algorithmic function" forces three
 | **j**  | Joy – positive affect above a sufficiency floor                  | [0, 1] |
 | **p**  | Purpose – alignment of actions with chosen goals                 | [0, 1] |
 | **ε**  | Empathy – accuracy of perspective-taking across groups           | [0, 1] |
-| **λ**  | Love/Protection – risk-weighted safeguarding of life and dignity | [0, 1] |
+| **λ_L**| Love – active extension for growth and development (bell hooks: "the will to extend self for another's development") | [0, 1] |
+| **λ_P**| Protection – risk-weighted safeguarding from harm to life and dignity | [0, 1] |
 | **ξ**  | Truth/Epistemic Integrity – accuracy and transparency of institutional records | [0, 1] |
 
 All inputs are **population-weighted Atkinson complements** (1 − A_ε) with explicit inequality aversion parameter ε, so the metric rewards equitable distribution, not just high averages. (Atkinson index preferred over Gini for direct connection to exponent structure.)
@@ -33,13 +34,13 @@ All inputs are **population-weighted Atkinson complements** (1 − A_ε) with ex
 **Multiplicative structure to prevent dimensional collapse:**
 
 ```
-Φ(humanity) = [ PRODUCT_{i in {c,κ,j,p,ε,λ,ξ}} (x_i^{α_i})^{θ_i} ] · Ψ_synergy · (1 - Ψ_penalty)
+Φ(humanity) = [ PRODUCT_{i in {c,κ,j,p,ε,λ_L,λ_P,ξ}} (x_i^{α_i})^{θ_i} ] · Ψ_synergy · (1 - Ψ_penalty)
 ```
 
 where:
-- **x_i** are the seven input constructs
+- **x_i** are the eight input constructs
 - **α_i** are exponents encoding marginal returns structure (see below)
-- **θ_i** are Nash SWF aggregation weights (sum to 1, default equal = 1/7 each)
+- **θ_i** are Nash SWF aggregation weights (sum to 1, default equal = 1/8 each)
 - **Ψ_synergy** is the synergy coupling term (multiplicative)
 - **Ψ_penalty** is the divergence penalty term (additive)
 
@@ -58,7 +59,7 @@ where:
 |-----------|----------|---------------|
 | c, κ (basic needs) | α = 0.7 | **Concave:** First units of care/compassion matter most (Atkinson inequality aversion) |
 | j, p (experiential) | α = 1.0 | **Linear:** No inherent satiation or acceleration |
-| ε, λ (relational) | α = 0.8 | **Mildly concave:** Perspective-taking and protection gains most valuable when scarce |
+| ε, λ_L, λ_P (relational) | α = 0.8 | **Mildly concave:** Perspective-taking, love, and protection gains most valuable when scarce |
 | ξ (epistemic) | α = 1.0 | **Linear:** Truth is non-substitutable; every unit matters equally |
 
 **Gradient properties verified:**
@@ -70,31 +71,40 @@ This is the **opposite** of the original formulation and achieves the stated int
 ### Synergy Term (Multiplicative)
 
 ```
-Ψ_synergy = 1 + η · [ sqrt(c · ε) + sqrt(κ · λ) + sqrt(j · p) + sqrt(ε · ξ) ]
+Ψ_synergy = 1 + η · [ sqrt(c · λ_L) + sqrt(κ · λ_P) + sqrt(j · p) + sqrt(ε · ξ) ]
 ```
 
 where η = 0.05 (calibrated so full synergy provides ~10% boost at balanced moderate levels, ~28% premium when comparing balanced vs. imbalanced configurations).
 
 **Properties:**
 - Geometric mean (sqrt) penalizes imbalance within pairs more aggressively than linear coupling
-- c=1, ε=0 → sqrt(0) = 0, no synergy contribution (vs. η·c·0=0 in linear form, difference is structural)
+- c=1, λ_L=0 → sqrt(0) = 0, no synergy contribution (vs. η·c·0=0 in linear form, difference is structural)
 - Multiplicative means high base scores are *capped* if synergy is missing
 
-**Synergy pairs:**
-1. **Care × Empathy:** Resource provision without perspective-taking is technical, not humane
-2. **Compassion × Love/Protection:** Responsive support requires protective capacity to be effective
+**Synergy pairs (UPDATED for love/protection split):**
+1. **Care × Love:** Resource provision (c) + active developmental extension (λ_L) = true flourishing, not mere maintenance. Material needs met through relational support enable growth.
+2. **Compassion × Protection:** Responsive crisis support (κ) + harm prevention capacity (λ_P) = effective intervention. Emergency response requires safeguarding infrastructure.
 3. **Joy × Purpose:** Flow states (Csikszentmihalyi) emerge from affect + goal-alignment
 4. **Empathy × Truth:** Perspective-taking accuracy requires epistemic integrity
+
+**Philosophical grounding:**
+The split between λ_L and λ_P follows bell hooks' insight that love is generative (creating capacity for growth), not merely protective (preventing harm). Isaiah Berlin's two concepts of liberty: negative freedom (protection from interference) vs. positive freedom (capacity to flourish). Both are necessary; neither is sufficient.
 
 ### Penalty Term (Divergence Within Pairs)
 
 ```
-Ψ_penalty = μ · [ (c - ε)² + (κ - λ)² + (j - p)² + (ε - ξ)² ] / 4
+Ψ_penalty = μ · [ (c - λ_L)² + (κ - λ_P)² + (j - p)² + (ε - ξ)² ] / 4
 ```
 
 where μ = 0.15.
 
-**Effect:** Directly penalizes large divergence between paired constructs. A society with c=1, ε=0 incurs penalty = 0.15·(1²)/4 = 0.0375 (small but load-bearing when combined with missing synergy).
+**Effect:** Directly penalizes large divergence between paired constructs. A society with c=1, λ_L=0 incurs penalty = 0.15·(1²)/4 = 0.0375 (small but load-bearing when combined with missing synergy).
+
+**Updated pairing rationale:**
+- **c ↔ λ_L**: Care without love = technical provision without growth support (paternalistic)
+- **κ ↔ λ_P**: Compassion without protection = crisis response without safeguarding (vulnerable)
+- **j ↔ p**: Joy without purpose = hedonic but directionless (meaningless pleasure)
+- **ε ↔ ξ**: Empathy without truth = perspective-taking on false premises (manipulated solidarity)
 
 ---
 
@@ -104,55 +114,61 @@ where μ = 0.15.
 import numpy as np
 
 def humanity_phi(
-    metrics: dict[str, float],  # {c, kappa, j, p, eps, lam, xi} all in [0,1]
+    metrics: dict[str, float],  # {c, kappa, j, p, eps, lam_L, lam_P, xi} all in [0,1]
     weights: dict[str, float] = None,  # optional weight overrides
     eta: float = 0.05,  # synergy coupling strength
     mu: float = 0.15,  # divergence penalty strength
 ) -> float:
     """
-    Nash Social Welfare formulation of Phi(humanity).
+    Nash Social Welfare formulation of Phi(humanity) with 8 constructs.
 
     Returns Phi in [0, 1]. Phi=0 if any input is 0 (multiplicative structure).
     Phi approaches 1 as all inputs approach 1 with balanced synergy.
+
+    Updated 2026-02-19: Split λ (love/protection) into λ_L (love) and λ_P (protection)
+    following bell hooks' definition of love as active extension for growth.
     """
     c = metrics['c']
     kappa = metrics['kappa']
     j = metrics['j']
     p = metrics['p']
     eps = metrics['eps']
-    lam = metrics['lam']
+    lam_L = metrics['lam_L']  # Love: active extension for development
+    lam_P = metrics['lam_P']  # Protection: safeguarding from harm
     xi = metrics['xi']
 
     # Exponents (concave for basic/relational needs, linear for experiential/epistemic)
     exponents = {'c': 0.7, 'kappa': 0.7, 'j': 1.0, 'p': 1.0,
-                 'eps': 0.8, 'lam': 0.8, 'xi': 1.0}
+                 'eps': 0.8, 'lam_L': 0.8, 'lam_P': 0.8, 'xi': 1.0}
 
     # Weights (default equal, sum to 1 for Nash aggregation)
     if weights is None:
-        weights = {k: 1.0/7 for k in exponents.keys()}
+        weights = {k: 1.0/8 for k in exponents.keys()}  # 1/8 for 8 constructs
 
     # Nash SWF base (multiplicative)
     # Formula: PRODUCT (x_i^α_i)^θ_i where α=concave exponent, θ=Nash weight
     base = 1.0
     for key, x in metrics.items():
         alpha = exponents[key]
-        theta = weights[key]  # Nash weight (default 1/7, sums to 1)
+        theta = weights[key]  # Nash weight (default 1/8, sums to 1)
         base *= (x**alpha) ** theta
 
     # Synergy (multiplicative, geometric mean of pairs)
+    # UPDATED: Care×Love, Compassion×Protection (not Care×Empathy, Compassion×Lambda)
     synergy = 1 + eta * (
-        np.sqrt(c * eps) +
-        np.sqrt(kappa * lam) +
-        np.sqrt(j * p) +
-        np.sqrt(eps * xi)
+        np.sqrt(c * lam_L) +      # Care × Love: provision + growth extension
+        np.sqrt(kappa * lam_P) +  # Compassion × Protection: response + safeguarding
+        np.sqrt(j * p) +          # Joy × Purpose: affect + meaning
+        np.sqrt(eps * xi)         # Empathy × Truth: perspective + integrity
     )
 
     # Penalty (additive, squared divergence)
+    # UPDATED: Penalizes care/love and compassion/protection divergence
     penalty = mu * (
-        (c - eps)**2 +
-        (kappa - lam)**2 +
-        (j - p)**2 +
-        (eps - xi)**2
+        (c - lam_L)**2 +      # Care without love = technical provision
+        (kappa - lam_P)**2 +  # Compassion without protection = vulnerable support
+        (j - p)**2 +          # Joy without purpose = meaningless pleasure
+        (eps - xi)**2         # Empathy without truth = manipulated solidarity
     ) / 4
 
     phi = base * synergy * (1 - penalty)
@@ -163,21 +179,21 @@ def humanity_phi(
 
 ### Edge Case Analysis
 
-**Case 1: Care-without-empathy dystopia (c=1, ε=0, others=0.5)**
+**Case 1: Care-without-love dystopia (c=1, λ_L=0, others=0.5)**
 
 ```python
-base = (1*1^0.7)^(1/7) * (1*0.5^0.7)^(1/7) * ... * (1*0^0.8)^(1/7) = 0  # any factor=0 → product=0
+base = (1^0.7)^(1/8) * (0.5^0.7)^(1/8) * ... * (0^0.8)^(1/8) = 0  # any factor=0 → product=0
 ```
 
-**Φ = 0.** The multiplicative structure **structurally prevents** dimensional collapse.
+**Φ = 0.** The multiplicative structure **structurally prevents** dimensional collapse. Material provision (care) without developmental support (love) produces zero welfare.
 
 **Case 2: Balanced moderate society (all=0.5)**
 
 ```python
-base ≈ (0.5^0.7)^(1/7) * (0.5^0.8)^(1/7) * (0.5^1.0)^(1/7) * ... ≈ 0.553  # geometric mean
+base ≈ (0.5^0.7)^(1/8) * (0.5^0.7)^(1/8) * (0.5^1.0)^(1/8) * ... ≈ 0.578  # geometric mean
 synergy = 1 + 0.05*(sqrt(0.25) + sqrt(0.25) + sqrt(0.25) + sqrt(0.25)) = 1 + 0.05*2 = 1.1
 penalty = 0.15*(0 + 0 + 0 + 0)/4 = 0  # no divergence
-Φ ≈ 0.553 * 1.1 * 1.0 ≈ 0.607
+Φ ≈ 0.578 * 1.1 * 1.0 ≈ 0.636
 ```
 
 **Case 3: Perfect equality (all=1.0)**
@@ -191,6 +207,18 @@ penalty = 0
 
 (Perfect synergy provides 20% boost; clamped to preserve [0,1] range.)
 
+**Case 4: Paternalistic care (c=0.9, λ_L=0.1, λ_P=0.9, others=0.5)**
+
+```python
+# High care + protection, but low love = paternalistic control
+base ≈ 0.55  # diminished by low λ_L
+synergy = 1 + 0.05*(sqrt(0.09) + sqrt(0.81) + 0.5 + 0.5) ≈ 1 + 0.05*(0.3 + 0.9 + 1.0) = 1.11
+penalty = 0.15*[(0.9-0.1)^2 + (0.5-0.9)^2 + 0 + 0]/4 = 0.15*(0.64 + 0.16)/4 = 0.03
+Φ ≈ 0.55 * 1.11 * 0.97 ≈ 0.59
+```
+
+**Interpretation:** Paternalistic regimes (high care + protection, low love) score moderately, not highly—the system correctly identifies that safeguarding without developmental support is incomplete welfare.
+
 ---
 
 ## Constraint Layer
@@ -198,7 +226,8 @@ penalty = 0
 Before using Φ for any decision, enforce:
 
 1. **Hard floors** (rights-based minimums):
-   - c, κ, λ ≥ 0.2 (basic needs/protection are non-negotiable)
+   - c, κ, λ_P ≥ 0.2 (basic needs, compassion, protection are non-negotiable)
+   - λ_L ≥ 0.15 (developmental support minimum—slightly lower than protection but still essential)
    - ξ ≥ 0.3 (epistemic integrity minimum for functioning institutions)
    - All others ≥ 0.1
 
@@ -220,24 +249,29 @@ Before using Φ for any decision, enforce:
 For policy optimization, partial derivatives:
 
 ```
-∂Φ/∂c = Φ · [ (θ_c / c) + (η/(2·synergy)) · (ε/(2·sqrt(c·ε))) - (μ/2)·(c-ε) ]
+∂Φ/∂c = Φ · [ (θ_c / c) + (η/(2·synergy)) · (λ_L/(2·sqrt(c·λ_L))) - (μ/2)·(c-λ_L) ]
 ```
 
-**At low c (c=0.1, ε=0.5):**
-- First term (Nash): θ_c/c = (1/7)/0.1 ≈ 1.43
-- Synergy gradient: positive (encourages c↑ to balance with ε)
-- Penalty gradient: negative (c<ε, penalty pushes c↑)
+**At low c (c=0.1, λ_L=0.5):**
+- First term (Nash): θ_c/c = (1/8)/0.1 ≈ 1.25
+- Synergy gradient: positive (encourages c↑ to balance with λ_L)
+- Penalty gradient: negative (c<λ_L, penalty pushes c↑)
 
 **Net effect:** Strong incentive to improve c when scarce.
 
-**At low ε (ε=0.1, c=0.5):**
-- Nash term: θ_ε/ε ≈ 1.43
-- Synergy gradient: strong (4 pairs involving ε)
-- Penalty gradient: strong (ε<c in 2 pairs)
+**At low λ_L (λ_L=0.1, c=0.5):**
+- Nash term: θ_{λ_L}/λ_L = (1/8)/0.1 ≈ 1.25
+- Synergy gradient: strong (appears in care×love synergy pair)
+- Penalty gradient: strong (λ_L<c, penalty pushes λ_L↑)
 
-**Net effect:** Even stronger incentive to improve ε (appears in more synergy pairs).
+**Net effect:** Strong incentive to improve love (developmental support) when scarce.
 
-This is **mathematically correct** — both are prioritized when scarce, but relational goods (ε, λ) have higher marginal value due to appearing in multiple synergy pairs. This aligns with care ethics: technical provision matters, but relational goods are foundational.
+**Updated interpretation:** With 8 constructs, Nash weights are θ_i=1/8 (vs. 1/7 previously). The split between λ_L and λ_P allows distinct prioritization:
+- When λ_P is scarce but λ_L is adequate: prioritize protection (prevent harm)
+- When λ_L is scarce but λ_P is adequate: prioritize love (enable flourishing)
+- When both are scarce: multiplicative structure ensures both are critical
+
+This aligns with care ethics: defensive safeguarding (λ_P) and generative support (λ_L) are complementary but distinct. A society can have strong protection without developmental love (paternalism) or strong love without adequate protection (vulnerable solidarity). Φ correctly identifies both gaps.
 
 ---
 
@@ -265,7 +299,7 @@ This is **mathematically correct** — both are prioritized when scarce, but rel
 
 2. **Weight setting is political:** Equal weights are the neutral default, but deliberative processes may assign different θ_i. No formula bypasses normative debate.
 
-3. **Cultural pluralism:** The 7-construct taxonomy is Western-situated. Ubuntu, Confucian, Buddhist, Indigenous frameworks require different construct spaces, not just weight tuning.
+3. **Cultural pluralism:** The 8-construct taxonomy is Western-situated. Ubuntu (collective humanity), Confucian frameworks (filial piety, ritual propriety), Buddhist ethics (compassion + non-attachment), Indigenous frameworks (reciprocity with land) require different construct spaces, not just weight tuning. The love/protection split follows bell hooks (Black feminist tradition) but may not map cleanly to all cultural contexts.
 
 4. **Synergy normalization:** Current formulation allows Φ>1 at synergy_max. Either clamp or renormalize: `synergy = 1 + (eta/eta_max) * [...]` where eta_max bounds synergy ≤ constant.
 
@@ -293,7 +327,8 @@ def gap_urgency(gap: Gap, current_phi: float, metrics: dict) -> float:
     Estimate urgency of investigating this gap based on potential Φ impact.
 
     Temporal gap in financial records (2013-2017) → threatens 'c' (care)
-    Redacted correspondence about institutional oversight → threatens 'λ' (protection)
+    Redacted correspondence about community support programs → threatens 'λ_L' (love)
+    Missing safeguarding documentation → threatens 'λ_P' (protection)
     Contradictions in testimony → threatens 'ξ' (epistemic integrity)
     """
     # Which constructs does this gap threaten?
@@ -305,6 +340,11 @@ def gap_urgency(gap: Gap, current_phi: float, metrics: dict) -> float:
     # Gaps threatening constructs with high gradients (currently scarce) = high urgency
     return gradient_sum * gap.confidence * len(gap.affected_population)
 ```
+
+**Example construct inference:**
+- "Medical experimentation without consent" → λ_P (protection violated), ξ (truth suppressed)
+- "Mutual aid networks excluded from institutional support" → λ_L (love absent), c (care inadequate)
+- "Community healing spaces defunded" → λ_L (developmental support removed), κ (compassion withdrawn)
 
 **Safety veto integration:**
 
@@ -336,4 +376,33 @@ See `/home/crichalchemist/wave-experiment/docs/humanity-analysis.md` for full li
 
 ---
 
-*This function is not a turnkey moral oracle. It is a disciplined framework forcing transparency about assumptions and trade-offs while structurally preventing care-without-empathy dystopias and prioritizing the protection and flourishing of all human beings.*
+## Changelog
+
+### 2026-02-19: Split λ into λ_L (Love) and λ_P (Protection)
+
+**Rationale:** The original conflated construct (λ = love/protection) merged two philosophically distinct phenomena:
+- **Love (λ_L)**: Active extension for growth and development (bell hooks: "the will to extend self for another's development")
+- **Protection (λ_P)**: Risk-weighted safeguarding from harm to life and dignity
+
+**Theoretical grounding:**
+- bell hooks, *All About Love*: Love is generative (creating capacity), not defensive (preventing loss)
+- Isaiah Berlin, *Two Concepts of Liberty*: Negative freedom (absence of interference) ≠ positive freedom (capability to flourish)
+- Paternalistic care paradox: High c + λ_P but low λ_L = control, not flourishing
+
+**Structural changes:**
+- Constructs: 7 → 8 (c, κ, j, p, ε, λ_L, λ_P, ξ)
+- Nash weights: 1/7 → 1/8 (still sum to 1)
+- Synergy pairs: c×ε → c×λ_L (care×love), κ×λ → κ×λ_P (compassion×protection)
+- Penalty pairs: Updated to match new synergy structure
+- Hard floors: λ_P ≥ 0.2 (protection non-negotiable), λ_L ≥ 0.15 (love essential but slightly lower floor)
+
+**Implications for Detective LLM:**
+- Medical Apartheid: Both λ_L and λ_P critically absent (no protection + no developmental support)
+- Black Feminist Thought: High λ_L themes (mutual aid, collective growth, solidarity)
+- Paternalistic institutional care: High c + λ_P but low λ_L (provision + safeguarding without growth support)
+
+**Mathematical verification:** All edge cases recalculated. Gradient properties preserved. Nash SWF structure intact.
+
+---
+
+*This function is not a turnkey moral oracle. It is a disciplined framework forcing transparency about assumptions and trade-offs while structurally preventing care-without-love dystopias and prioritizing the protection and flourishing of all human beings.*
