@@ -71,3 +71,41 @@ def test_knowledge_edge_hop_count_zero_raises() -> None:
 def test_knowledge_edge_empty_source_raises() -> None:
     with pytest.raises(ValueError, match="source must not be empty"):
         KnowledgeEdge(source="", target="B", relation=RelationType.CAUSAL, confidence=0.5)
+
+
+def test_gap_with_welfare_fields():
+    """Gap accepts welfare_impact and threatened_constructs fields."""
+    gap = Gap(
+        type=GapType.TEMPORAL,
+        description="Resource gap",
+        confidence=0.8,
+        location="doc.pdf",
+        welfare_impact=5.2,
+        threatened_constructs=("c", "lam"),
+    )
+    assert gap.welfare_impact == 5.2
+    assert gap.threatened_constructs == ("c", "lam")
+
+
+def test_gap_welfare_fields_default_to_zero_and_empty():
+    """Welfare fields default to 0.0 and () for backward compatibility."""
+    gap = Gap(
+        type=GapType.TEMPORAL,
+        description="Gap",
+        confidence=0.7,
+        location="doc.pdf",
+    )
+    assert gap.welfare_impact == 0.0
+    assert gap.threatened_constructs == ()
+
+
+def test_gap_welfare_impact_validation():
+    """Gap.welfare_impact must be >= 0."""
+    with pytest.raises(ValueError, match="welfare_impact must be >= 0"):
+        Gap(
+            type=GapType.TEMPORAL,
+            description="Gap",
+            confidence=0.7,
+            location="doc.pdf",
+            welfare_impact=-1.0,
+        )

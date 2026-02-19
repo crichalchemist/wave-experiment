@@ -42,10 +42,18 @@ class Gap:
     confidence: float
     location: str  # document identifier or section reference
 
+    # NEW: Welfare grounding fields
+    welfare_impact: float = 0.0  # Σ(Φ_gradients) × confidence
+    threatened_constructs: tuple[str, ...] = ()  # e.g., ("c", "lam", "xi")
+
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):
             raise ValueError(
                 f"Gap.confidence must be in [0.0, 1.0], got {self.confidence!r}"
+            )
+        if self.welfare_impact < 0.0:
+            raise ValueError(
+                f"Gap.welfare_impact must be >= 0, got {self.welfare_impact!r}"
             )
 
 
