@@ -34,8 +34,7 @@ env/
 *~
 
 # Data (large files)
-data/epstein/raw/
-data/epstein/processed/
+data/
 *.db
 *.sqlite
 
@@ -53,3 +52,22 @@ checkpoints/*.pth
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Claude Code artifacts
+.claude/
+**/CLAUDE.md
+
+# Node modules (if any)
+node_modules/
+package-lock.json
+
+# Temporary/research files
+circleback.txt
+pdf_insights.md
+construction research/
+smiles and cries/

@@ -105,7 +105,7 @@ def warmup(output: str, max_examples: int, constitution: str) -> None:
     if not critic_endpoint:
         raise click.ClickException("Set AZURE_ENDPOINT for the constitutional critic (Claude).")
 
-    critic = AzureFoundryProvider(endpoint=critic_endpoint, credential=critic_key, model=critic_model)
+    critic = AzureFoundryProvider(endpoint=critic_endpoint, api_key=critic_key, model=critic_model)
     cfg = ConstitutionalWarmupConfig(
         output_path=output,
         max_examples=max_examples,
