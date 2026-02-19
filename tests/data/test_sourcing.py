@@ -48,3 +48,48 @@ def test_hf_loader_metadata_preserved():
             assert "split" in meta
     except Exception as e:
         pytest.skip(f"Dataset unavailable: {e}")
+
+
+def test_doj_loader_import():
+    from src.data.sourcing.doj_loader import load_courtlistener_batch
+    assert callable(load_courtlistener_batch)
+
+
+def test_doj_loader_returns_list(monkeypatch):
+    """Loader returns list even when API returns empty results."""
+    import httpx
+    from src.data.sourcing.doj_loader import load_courtlistener_batch
+
+    # Mock httpx to avoid network in unit tests
+    class _MockResponse:
+        def raise_for_status(self): pass
+        def json(self): return {"results": [], "count": 0}
+
+    monkeypatch.setattr(
+        "src.data.sourcing.doj_loader._httpx_get",
+        lambda url, **kw: _MockResponse(),
+    )
+    results = load_courtlistener_batch(case_name="Maxwell", max_examples=5)
+    assert isinstance(results, list)
+
+
+def test_doj_loader_normalizes_fields(monkeypatch):
+    from src.data.sourcing.doj_loader import load_courtlistener_batch
+
+    class _MockResponse:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"results": [
+                {"plain_text": "Court document text here.", "date_filed": "2021-11-01",
+                 "docket_id": 123, "description": "Motion to suppress"}
+            ], "count": 1}
+
+    monkeypatch.setattr(
+        "src.data.sourcing.doj_loader._httpx_get",
+        lambda url, **kw: _MockResponse(),
+    )
+    results = load_courtlistener_batch(case_name="Maxwell", max_examples=5)
+    assert len(results) == 1
+    assert "text" in results[0]
+    assert "source" in results[0]
+    assert results[0]["metadata"]["jurisdiction"] == "SDNY"
