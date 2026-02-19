@@ -92,3 +92,29 @@ def test_evolve_missing_evidence_path_returns_422(client: TestClient) -> None:
     """Missing required field triggers Pydantic validation → 422 Unprocessable Entity."""
     response = client.post("/evolve", json={})
     assert response.status_code == 422
+
+
+def test_evolve_endpoint_accepts_phi_metrics(client: TestClient) -> None:
+    """POST /evolve accepts optional phi_metrics parameter."""
+    response = client.post(
+        "/evolve",
+        json={
+            "evidence_path": "Evidence of resource deprivation",
+            "phi_metrics": {"c": 0.2, "lam": 0.3},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "hypothesis_id" in data
+    assert "confidence" in data
+
+
+def test_evolve_endpoint_works_without_phi_metrics(client: TestClient) -> None:
+    """POST /evolve works without phi_metrics (backward compatible)."""
+    response = client.post(
+        "/evolve",
+        json={"evidence_path": "Test evidence"},
+    )
+
+    assert response.status_code == 200

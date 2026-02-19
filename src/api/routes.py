@@ -55,6 +55,7 @@ if BaseModel is not None:
 
     class AnalyzeRequest(BaseModel):  # type: ignore[valid-type]
         claim: str
+        phi_metrics: dict[str, float] | None = None  # optional Φ construct levels
 
     class AnalyzeResponse(BaseModel):  # type: ignore[valid-type]
         verdict: str
@@ -67,6 +68,7 @@ if BaseModel is not None:
 
     class EvolveRequest(BaseModel):  # type: ignore[valid-type]
         evidence_path: str  # text of new evidence; used as hypothesis statement
+        phi_metrics: dict[str, float] | None = None  # optional Φ construct levels
 
     class EvolveResponse(BaseModel):  # type: ignore[valid-type]
         hypothesis_id: str
@@ -176,10 +178,13 @@ def create_app(
         """
         Evolve a fresh hypothesis against the supplied evidence text.
 
+        Optionally accepts phi_metrics for welfare-aware hypothesis evolution.
+
         A base hypothesis is created at maximum-uncertainty confidence (0.5)
-        and then updated by evolve_hypothesis().  The experience record from
-        that call is discarded at this layer — the API surface is stateless;
-        callers that need lineage tracking should use the Python API directly.
+        and then updated by evolve_parallel() with k=1 (single branch).
+        The experience record from that call is discarded at this layer —
+        the API surface is stateless; callers that need lineage tracking
+        should use the Python API directly.
 
         Data minimized to: hypothesis_id, statement, confidence.
         """
@@ -188,12 +193,23 @@ def create_app(
             confidence=_INITIAL_HYPOTHESIS_CONFIDENCE,
         )
 
-        evolved, _experience = evolve_hypothesis(
+        # Use asyncio.run to call async evolve_parallel
+        import asyncio
+        from src.detective.parallel_evolution import evolve_parallel
+
+        results = asyncio.run(evolve_parallel(
             hypothesis=base,
-            new_evidence=request.evidence_path,
-            library=EMPTY_LIBRARY,
+            evidence_list=[request.evidence_path],
             provider=_provider,
-        )
+            k=1,
+            library=EMPTY_LIBRARY,
+            phi_metrics=request.phi_metrics,
+        ))
+
+        if results:
+            evolved = results[0].hypothesis
+        else:
+            evolved = base
 
         return EvolveResponse(
             hypothesis_id=evolved.id,
