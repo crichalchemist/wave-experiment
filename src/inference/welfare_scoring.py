@@ -4,7 +4,7 @@ Welfare impact scoring for hypotheses and gaps.
 Maps investigative findings to Φ(humanity) constructs and computes
 welfare relevance via Φ gradients.
 """
-from typing import Dict, Tuple
+from typing import Tuple
 
 # Keyword patterns for construct threat inference
 # Based on humanity.md definitions and constitution.md usage
@@ -79,4 +79,4 @@ def infer_threatened_constructs(text: str) -> Tuple[str, ...]:
         if any(pattern in lower_text for pattern in patterns):
             threatened.append(construct)
 
-    return tuple(threatened)
+    return tuple(sorted(threatened))
