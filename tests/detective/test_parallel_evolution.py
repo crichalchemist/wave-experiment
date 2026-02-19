@@ -119,3 +119,113 @@ def test_highest_confidence_branch_first():
 
     confidences = [r.hypothesis.confidence for r in results]
     assert confidences == sorted(confidences, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_welfare_scoring_applied_to_evolved_hypotheses():
+    """Evolved hypotheses get welfare_relevance and threatened_constructs populated."""
+    from src.detective.parallel_evolution import evolve_parallel
+    from src.detective.hypothesis import Hypothesis
+    from src.core.providers import MockProvider
+
+    root = Hypothesis.create("Base hypothesis", 0.5)
+
+    evidence = [
+        "Evidence of resource deprivation",
+        "Minor administrative detail",
+    ]
+
+    provider = MockProvider(response="confidence: 0.7")
+    phi_metrics = {"c": 0.2, "lam": 0.5}  # care is scarce
+
+    results = await evolve_parallel(
+        hypothesis=root,
+        evidence_list=evidence,
+        provider=provider,
+        k=2,
+        phi_metrics=phi_metrics,
+    )
+
+    # All evolved hypotheses should have welfare fields populated
+    for result in results:
+        assert hasattr(result.hypothesis, "welfare_relevance")
+        assert hasattr(result.hypothesis, "threatened_constructs")
+
+
+@pytest.mark.asyncio
+async def test_welfare_aware_sorting():
+    """Results sorted by combined_score when phi_metrics provided."""
+    from src.detective.parallel_evolution import evolve_parallel
+    from src.detective.hypothesis import Hypothesis
+    from src.core.providers import MockProvider
+
+    root = Hypothesis.create("Base hypothesis", 0.5)
+
+    evidence = ["Evidence A", "Evidence B"]
+    provider = MockProvider(response="confidence: 0.6")
+    phi_metrics = {"c": 0.3}
+
+    results = await evolve_parallel(
+        hypothesis=root,
+        evidence_list=evidence,
+        provider=provider,
+        k=2,
+        phi_metrics=phi_metrics,
+    )
+
+    # Results should be sorted by combined_score (descending)
+    if len(results) >= 2:
+        assert results[0].hypothesis.combined_score() >= results[1].hypothesis.combined_score()
+
+
+@pytest.mark.asyncio
+async def test_high_welfare_relevance_for_urgent_findings():
+    """High-urgency findings receive high welfare_relevance scores."""
+    from src.detective.parallel_evolution import evolve_parallel
+    from src.detective.hypothesis import Hypothesis
+    from src.core.providers import MockProvider
+
+    # Hypothesis text itself must contain welfare-relevant keywords
+    root = Hypothesis.create("Resource allocation gap in vulnerable communities", 0.5)
+
+    evidence = ["Additional documentation showing funding shortfalls"]
+    provider = MockProvider(response="confidence: 0.5")
+    phi_metrics = {"c": 0.1, "lam": 0.2}  # scarce constructs
+
+    results = await evolve_parallel(
+        hypothesis=root,
+        evidence_list=evidence,
+        provider=provider,
+        k=1,
+        phi_metrics=phi_metrics,
+    )
+
+    # Welfare relevance should be high because hypothesis text contains "resource"
+    # and care construct (c) is scarce (0.1)
+    assert results[0].hypothesis.welfare_relevance > 0.5
+
+
+@pytest.mark.asyncio
+async def test_backward_compatible_without_phi_metrics():
+    """When phi_metrics=None, sorts by confidence alone (backward compatible)."""
+    from src.detective.parallel_evolution import evolve_parallel
+    from src.detective.hypothesis import Hypothesis
+    from src.core.providers import MockProvider
+
+    root = Hypothesis.create("Base hypothesis", 0.5)
+
+    evidence = ["Evidence A", "Evidence B"]
+    provider = MockProvider(response="confidence: 0.7")
+
+    results = await evolve_parallel(
+        hypothesis=root,
+        evidence_list=evidence,
+        provider=provider,
+        k=2,
+        phi_metrics=None,  # No welfare scoring
+    )
+
+    # Welfare fields should remain at defaults
+    for result in results:
+        assert result.hypothesis.welfare_relevance == 0.0
+        assert result.hypothesis.threatened_constructs == ()

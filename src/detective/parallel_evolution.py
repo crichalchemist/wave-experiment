@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from src.detective.hypothesis import Hypothesis
 from src.detective.experience import ExperienceLibrary
@@ -102,12 +102,16 @@ async def evolve_parallel(
     provider: ModelProvider,
     k: int = 3,
     library: ExperienceLibrary = (),
+    phi_metrics: dict[str, float] | None = None,
+    alpha: float = 0.7,
+    beta: float = 0.3,
 ) -> list[ParallelEvolutionResult]:
     """
-    GoT Generate(k): dispatch k parallel hypothesis branches.
+    GoT Generate(k): dispatch k parallel hypothesis branches with welfare-aware scoring.
 
     Each branch explores a distinct evidence item. Branches run concurrently
-    via asyncio.gather(). Results are sorted by evolved confidence, descending.
+    via asyncio.gather(). Results are sorted by combined_score (epistemic + welfare),
+    not confidence alone.
 
     Args:
         hypothesis: Root hypothesis to evolve from.
@@ -115,9 +119,13 @@ async def evolve_parallel(
         provider: LLM provider for branch reasoning.
         k: Number of parallel branches. Capped at len(evidence_list).
         library: Optional experience library for context.
+        phi_metrics: Current Φ construct levels (for welfare scoring).
+                     If None, welfare scoring is skipped (backward compatible).
+        alpha: Weight for epistemic confidence in combined score.
+        beta: Weight for welfare relevance in combined score.
 
     Returns:
-        List of ParallelEvolutionResult, sorted by confidence descending.
+        List of ParallelEvolutionResult, sorted by combined_score descending.
     """
     actual_k = min(k, len(evidence_list))
     if actual_k == 0:
@@ -132,4 +140,35 @@ async def evolve_parallel(
 
     results: list[ParallelEvolutionResult] = await asyncio.gather(*tasks)
 
-    return sorted(results, key=lambda r: r.hypothesis.confidence, reverse=True)
+    # Score welfare relevance for each evolved hypothesis
+    if phi_metrics is not None:
+        from src.inference.welfare_scoring import (
+            score_hypothesis_welfare,
+            infer_threatened_constructs,
+        )
+
+        for i, result in enumerate(results):
+            h = result.hypothesis
+            constructs = infer_threatened_constructs(h.text)
+            welfare_score = score_hypothesis_welfare(h, phi_metrics)
+
+            # Create updated hypothesis with welfare fields
+            updated_h = replace(
+                h,
+                welfare_relevance=welfare_score,
+                threatened_constructs=constructs,
+            )
+
+            # Replace result with updated hypothesis
+            results[i] = replace(result, hypothesis=updated_h)
+
+    # Sort by combined score (epistemic + welfare) instead of confidence alone
+    if phi_metrics is not None:
+        return sorted(
+            results,
+            key=lambda r: r.hypothesis.combined_score(alpha, beta),
+            reverse=True
+        )
+    else:
+        # Backward compatible: sort by confidence alone when phi_metrics not provided
+        return sorted(results, key=lambda r: r.hypothesis.confidence, reverse=True)
