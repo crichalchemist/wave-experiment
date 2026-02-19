@@ -93,3 +93,22 @@ def test_doj_loader_normalizes_fields(monkeypatch):
     assert "text" in results[0]
     assert "source" in results[0]
     assert results[0]["metadata"]["jurisdiction"] == "SDNY"
+
+
+def test_international_loader_import():
+    from src.data.sourcing.international_loader import load_occrp_batch
+    assert callable(load_occrp_batch)
+
+
+def test_international_loader_returns_list(monkeypatch):
+    from src.data.sourcing.international_loader import load_occrp_batch
+
+    monkeypatch.setattr(
+        "src.data.sourcing.international_loader._httpx_get",
+        lambda url, **kw: type("R", (), {
+            "raise_for_status": lambda s: None,
+            "text": "<html><article>Investigation text here</article></html>",
+        })(),
+    )
+    results = load_occrp_batch(max_examples=5)
+    assert isinstance(results, list)
