@@ -15,6 +15,10 @@ from src.core.providers import ModelProvider
 from src.data.graph_store import GraphStore
 from src.detective.experience import ExperienceLibrary
 from src.inference.reflection import inject_reflection_trigger
+from src.inference.welfare_scoring import (
+    compute_gap_urgency,
+    infer_threatened_constructs,
+)
 
 # ---------------------------------------------------------------------------
 # Named constants
@@ -305,6 +309,47 @@ def verify_inline(
         verdict=verdict,
         confidence=confidence,
     )
+
+
+# ---------------------------------------------------------------------------
+# Gap welfare scoring utility
+# ---------------------------------------------------------------------------
+
+
+def score_gaps_welfare(gaps: list, phi_metrics: dict[str, float]) -> list:
+    """
+    Score welfare impact for a list of Gap objects and sort by urgency.
+
+    Args:
+        gaps: List of Gap objects to score
+        phi_metrics: Current Φ construct levels
+
+    Returns:
+        Gaps sorted by welfare urgency (descending)
+
+    Note:
+        This utility is ready for integration when gap detection
+        is wired into the analyze() pipeline. Current pipeline returns
+        AnalysisResult without gaps field.
+    """
+    from src.core.types import Gap
+    from dataclasses import replace
+
+    scored_gaps = []
+    for gap in gaps:
+        # Infer constructs if not already set
+        if not gap.threatened_constructs:
+            constructs = infer_threatened_constructs(gap.description)
+            gap = replace(gap, threatened_constructs=constructs)
+
+        # Compute welfare impact
+        welfare_impact = compute_gap_urgency(gap, phi_metrics)
+        gap = replace(gap, welfare_impact=welfare_impact)
+
+        scored_gaps.append(gap)
+
+    # Sort by welfare urgency (descending)
+    return sorted(scored_gaps, key=lambda g: g.welfare_impact, reverse=True)
 
 
 # ---------------------------------------------------------------------------
