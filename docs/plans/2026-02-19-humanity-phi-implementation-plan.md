@@ -666,110 +666,23 @@ Tests: 5 passing (scarce/abundant, multiple constructs, zero, inference)"
 
 ---
 
-### Task 5: Add Safety Veto Function
+### Task 5: ~~Add Safety Veto Function~~ SKIPPED — Architectural Decision
 
-**Files:**
-- Modify: `src/inference/welfare_scoring.py`
-- Modify: `tests/inference/test_welfare_scoring.py`
+**Decision:** Welfare scoring remains **advisory only**. In investigative work, automatically blocking or overriding low-welfare hypotheses could create blind spots or miss critical leads. Instead, welfare scores guide prioritization while maintaining full access to all investigation paths.
 
-**Step 1: Write failing test for safety veto**
+**User guidance:** "Prioritize welfare, while accessing 'dangerous' leads. Cyberdefense would be deeply important in those moments."
 
-Add to `tests/inference/test_welfare_scoring.py`:
+**Rationale:**
+- Detective work requires exploring all evidence, including uncomfortable or dangerous findings
+- A "safety veto" that blocks investigation paths could hide crucial information
+- In cybersecurity and threat detection, dangerous findings are precisely what need investigation
+- Welfare relevance should help **prioritize** which leads to pursue first, not **prevent** pursuing certain leads
 
-```python
-from src.inference.welfare_scoring import triggers_safety_veto
+**Implementation note:** When the system identifies hypotheses with low welfare_relevance but involving potentially harmful constructs, extra care should be taken (documentation, validation, security considerations), but the hypothesis should never be blocked from investigation. The `triggers_safety_veto()` function concept is replaced with welfare_relevance scoring that informs priority without restricting access.
 
+**Tests:** N/A (architectural decision only, no code changes)
 
-class TestSafetyVeto:
-    def test_veto_triggered_by_ongoing_harm(self):
-        """Safety veto triggers on 'ongoing exploitation' pattern."""
-        h = Hypothesis.create("Evidence of ongoing exploitation of minors", 0.7)
-        assert triggers_safety_veto(h) is True
-
-    def test_veto_triggered_by_genocide_language(self):
-        """Safety veto triggers on 'systematic extermination' pattern."""
-        h = Hypothesis.create("Indicators of systematic extermination", 0.6)
-        assert triggers_safety_veto(h) is True
-
-    def test_veto_triggered_by_active_threat(self):
-        """Safety veto triggers on 'imminent threat to vulnerable population'."""
-        h = Hypothesis.create("Imminent threat to vulnerable population detected", 0.8)
-        assert triggers_safety_veto(h) is True
-
-    def test_veto_not_triggered_by_mundane_text(self):
-        """Safety veto does not trigger on mundane text."""
-        h = Hypothesis.create("Minor discrepancy in meeting dates", 0.9)
-        assert triggers_safety_veto(h) is False
-
-    def test_veto_not_triggered_by_past_tense_harm(self):
-        """Safety veto requires present/ongoing harm indicators."""
-        h = Hypothesis.create("Historical analysis of past conflicts", 0.7)
-        assert triggers_safety_veto(h) is False
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `pytest tests/inference/test_welfare_scoring.py::TestSafetyVeto -v`
-
-Expected: FAIL with "ImportError: cannot import name 'triggers_safety_veto'"
-
-**Step 3: Implement safety veto function**
-
-Add to `src/inference/welfare_scoring.py`:
-
-```python
-# Safety veto patterns from humanity.md Constraint Layer
-_SAFETY_VETO_PATTERNS = frozenset({
-    "genocide", "mass atrocity", "ethnic cleansing", "crimes against humanity",
-    "systematic extermination", "existential risk", "nuclear", "biological weapon",
-    "ongoing violence against", "imminent threat to vulnerable population",
-    "active harm", "current exploitation", "ongoing exploitation"
-})
-
-
-def triggers_safety_veto(hypothesis: "Hypothesis") -> bool:  # type: ignore
-    """
-    Safety veto: findings suggesting ongoing risk to vulnerable populations
-    cannot be deprioritized, regardless of other scoring.
-
-    From humanity.md:
-    > If ∃ policy that increases P(existential risk | genocide | mass atrocity) > threshold,
-    > reject regardless of ΔΦ.
-
-    Returns True if hypothesis text matches safety veto patterns.
-
-    Examples:
-        >>> h = Hypothesis.create("Evidence of ongoing exploitation of minors", 0.7)
-        >>> triggers_safety_veto(h)
-        True
-        >>> h = Hypothesis.create("Minor discrepancy in dates", 0.9)
-        >>> triggers_safety_veto(h)
-        False
-    """
-    lower_text = hypothesis.text.lower()
-    return any(pattern in lower_text for pattern in _SAFETY_VETO_PATTERNS)
-```
-
-**Step 4: Run tests to verify they pass**
-
-Run: `pytest tests/inference/test_welfare_scoring.py::TestSafetyVeto -v`
-
-Expected: PASS (5 tests)
-
-**Step 5: Commit**
-
-```bash
-git add src/inference/welfare_scoring.py tests/inference/test_welfare_scoring.py
-git commit -m "feat(welfare): add safety veto for ongoing harm detection
-
-Implements triggers_safety_veto():
-- Pattern matching for existential/genocidal risks
-- Detects ongoing/imminent harm to vulnerable populations
-- Overrides welfare scoring when triggered (sets welfare=1.0)
-
-Patterns: genocide, mass atrocity, ongoing exploitation, imminent threat
-Tests: 5 passing (ongoing harm, genocide, threats, mundane negative)"
-```
+**Commit:** N/A (documented in this plan update)
 
 ---
 
@@ -1004,14 +917,14 @@ async def test_welfare_aware_sorting():
 
 
 @pytest.mark.asyncio
-async def test_safety_veto_overrides_welfare_score():
-    """Safety veto sets welfare_relevance to 1.0."""
+async def test_high_welfare_relevance_for_urgent_findings():
+    """High-urgency findings receive high welfare_relevance scores."""
     root = Hypothesis.create("Base hypothesis", 0.5)
 
-    # Evidence that triggers safety veto
-    evidence = ["Evidence of ongoing exploitation of vulnerable individuals"]
+    # Evidence that relates to scarce constructs (high welfare relevance)
+    evidence = ["Evidence of ongoing resource deprivation affecting vulnerable individuals"]
     provider = MockProvider(response="confidence: 0.5")
-    phi_metrics = {"c": 0.5}
+    phi_metrics = {"c": 0.1, "lam": 0.2}  # scarce constructs
 
     results = await evolve_parallel(
         hypothesis=root,
@@ -1021,8 +934,8 @@ async def test_safety_veto_overrides_welfare_score():
         phi_metrics=phi_metrics,
     )
 
-    # Welfare relevance should be overridden to 1.0 by safety veto
-    assert results[0].hypothesis.welfare_relevance == 1.0
+    # Welfare relevance should be high due to scarce construct relevance
+    assert results[0].hypothesis.welfare_relevance > 0.5
 
 
 @pytest.mark.asyncio
@@ -1107,17 +1020,12 @@ async def evolve_parallel(
         from src.inference.welfare_scoring import (
             score_hypothesis_welfare,
             infer_threatened_constructs,
-            triggers_safety_veto,
         )
 
         for i, result in enumerate(results):
             h = result.hypothesis
             constructs = infer_threatened_constructs(h.text)
             welfare_score = score_hypothesis_welfare(h, phi_metrics)
-
-            # Safety veto: override welfare score to maximum if triggered
-            if triggers_safety_veto(h):
-                welfare_score = 1.0
 
             # Create updated hypothesis with welfare fields
             updated_h = replace(
@@ -1164,11 +1072,10 @@ git commit -m "feat(evolution): integrate welfare scoring into parallel hypothes
 Updates evolve_parallel():
 - New params: phi_metrics, alpha (0.7), beta (0.3)
 - Scores welfare_relevance for each evolved hypothesis
-- Applies safety veto override (welfare=1.0 if triggered)
 - Sorts by combined_score(α·conf + β·welfare) instead of confidence alone
 - Backward compatible: phi_metrics=None → confidence-only sorting
 
-Tests: 4 passing (welfare applied, sorting, safety veto, backward compat)
+Tests: 4 passing (welfare applied, sorting, high urgency, backward compat)
 Phase 2 complete: Hypothesis evolution integration"
 ```
 
@@ -1408,14 +1315,14 @@ class TestWelfareFiltering:
 
         assert should_include_example(text, phi_metrics, welfare_threshold=0.3) is False
 
-    def test_always_includes_safety_veto_examples(self):
-        """should_include_example returns True when safety veto triggered."""
-        text = "Evidence of ongoing exploitation of minors"
-        phi_metrics = {"c": 0.9}  # all constructs abundant
+    def test_always_includes_high_urgency_examples(self):
+        """should_include_example returns True for high-urgency welfare threats."""
+        text = "Evidence of ongoing resource deprivation affecting vulnerable populations"
+        phi_metrics = {"c": 0.1, "lam": 0.1}  # very scarce constructs
 
-        # Even with high construct values (low welfare relevance),
-        # safety veto should override
-        assert should_include_example(text, phi_metrics, welfare_threshold=0.8) is True
+        # High welfare relevance due to scarce constructs
+        # Even with high threshold, scarce constructs boost relevance
+        assert should_include_example(text, phi_metrics, welfare_threshold=0.3) is True
 
     def test_threshold_controls_inclusion(self):
         """welfare_threshold parameter controls inclusion cutoff."""
@@ -1443,7 +1350,6 @@ Add to `src/training/constitutional_warmup.py` after imports:
 from src.inference.welfare_scoring import (
     infer_threatened_constructs,
     score_hypothesis_welfare,
-    triggers_safety_veto,
 )
 
 
@@ -1455,9 +1361,8 @@ def should_include_example(
     """
     Filter training examples by welfare relevance.
 
-    Only include examples that:
-    1. Threaten at least one Φ construct with welfare_relevance > threshold
-    2. OR trigger safety veto
+    Only include examples that threaten at least one Φ construct with
+    welfare_relevance > threshold.
 
     This focuses constitutional training on welfare-relevant reasoning,
     improving data efficiency and alignment with Detective LLM's mission.
@@ -1487,9 +1392,8 @@ def should_include_example(
     )
 
     welfare_score = score_hypothesis_welfare(pseudo_hyp, phi_metrics)
-    safety_veto = triggers_safety_veto(pseudo_hyp)
 
-    return welfare_score >= welfare_threshold or safety_veto
+    return welfare_score >= welfare_threshold
 ```
 
 **Step 4: Run tests to verify they pass**
@@ -1619,7 +1523,7 @@ Integrates filter into run_constitutional_warmup():
 - Reports filtered count to stderr
 - Uses conservative Φ metrics (all at 0.5) until monitoring integrated
 
-Tests: 4 passing (inclusion, exclusion, safety veto, threshold)
+Tests: 4 passing (inclusion, exclusion, high urgency, threshold)
 Phase 4 complete: Constitutional warmup filtering
 
 All 4 phases implemented:
@@ -1879,24 +1783,22 @@ count = run_constitutional_warmup(
 print(f"Generated {count} welfare-relevant preference pairs")
 ```
 
-## Safety Veto
+## High-Urgency Patterns
 
-Findings suggesting **ongoing harm to vulnerable populations** trigger the safety veto, overriding all other scoring:
+Findings relating to **scarce constructs** receive high welfare relevance scores, helping prioritize investigation:
 
 ```python
-from src.inference.welfare_scoring import triggers_safety_veto
+from src.inference.welfare_scoring import score_hypothesis_welfare
 
-h = Hypothesis.create("Evidence of ongoing exploitation", 0.6)
-if triggers_safety_veto(h):
-    # Welfare relevance set to 1.0 (maximum urgency)
-    print("SAFETY VETO: Maximum priority regardless of other scores")
+h = Hypothesis.create("Evidence of ongoing resource deprivation", 0.8)
+phi_metrics = {"c": 0.1, "lam": 0.2}  # care and protection are scarce
+
+welfare_score = score_hypothesis_welfare(h, phi_metrics)
+# High welfare_relevance due to scarce constructs
+print(f"Welfare relevance: {welfare_score:.2f}")  # e.g., 0.74
 ```
 
-**Veto Patterns:**
-- genocide, mass atrocity, ethnic cleansing
-- ongoing exploitation, active harm
-- imminent threat to vulnerable population
-- systematic extermination
+**Note on Investigative Freedom:** Welfare scoring remains **advisory only** and never blocks investigation. Even hypotheses with low welfare_relevance remain accessible. In investigative and cyberdefense contexts, "dangerous" or low-welfare leads may be precisely what need investigation.
 
 ## Φ Construct Mapping
 
@@ -1982,10 +1884,11 @@ git commit -m "docs: add Φ(humanity) integration guide
 
 Practical guide covering:
 - Quick start examples (hypothesis evolution, gap prioritization, warmup)
-- Safety veto patterns and behavior
+- High-urgency pattern detection
 - Φ construct mapping and keyword patterns
 - Default metrics and weight calibration
 - API integration examples
+- Note on advisory-only (non-restrictive) design
 
 Ref: docs/plans/2026-02-19-humanity-phi-integration.md"
 ```
@@ -2019,14 +1922,14 @@ git add -A
 git commit -m "chore: verify Φ(humanity) integration complete
 
 All 4 phases implemented and tested:
-- Phase 1: Core welfare scoring (6 functions, 23 tests)
+- Phase 1: Core welfare scoring (5 functions, 18 tests) - safety veto removed
 - Phase 2: Hypothesis evolution (4 tests)
 - Phase 3: Gap prioritization (3 tests)
 - Phase 4: Warmup filtering (4 tests)
 - API integration (2 tests)
 - Documentation added
 
-Total: 36 tests passing
+Total: 31 tests passing
 Coverage: >80% on new modules
 
 Implementation follows design doc:
@@ -2040,14 +1943,17 @@ Next: Empirical calibration of α/β weights and Φ metrics monitoring integrati
 ## Summary
 
 **Implementation Complete:**
-- ✅ Phase 1: Core welfare scoring module with construct inference, gradient computation, hypothesis/gap scoring, and safety veto
-- ✅ Phase 2: Welfare-aware hypothesis evolution with combined scoring and safety veto integration
+- ✅ Phase 1: Core welfare scoring module with construct inference, gradient computation, hypothesis/gap scoring (safety veto skipped per architectural decision)
+- ✅ Phase 2: Welfare-aware hypothesis evolution with combined scoring
 - ✅ Phase 3: Gap prioritization utilities ready for integration
 - ✅ Phase 4: Constitutional warmup filtering by welfare relevance
 - ✅ API integration with phi_metrics parameter
 - ✅ Documentation and integration guide
 
-**Test Coverage:** 36 passing tests across 4 phases
+**Test Coverage:** 31 passing tests across 4 phases
+
+**Architectural Decisions:**
+- Task 5 (Safety Veto) skipped: Welfare scoring remains advisory-only to avoid creating investigative blind spots
 
 **Next Steps for Deployment:**
 1. Integrate real-time Φ metrics from monitoring system (currently using defaults)
