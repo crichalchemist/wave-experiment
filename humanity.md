@@ -1,5 +1,7 @@
 # Φ(humanity): A Rigorous Ethical-Affective Objective Function
 
+> **📄 Formalized Research Version:** See [`docs/humanity-phi-formalized.md`](docs/humanity-phi-formalized.md) for the academic paper with full citations, bibliography, and enhanced readability.
+
 ## Premise and Scope
 
 Expressing ethical-affective phenomena as an "algorithmic function" forces three design moves:
