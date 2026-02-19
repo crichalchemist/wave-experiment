@@ -168,3 +168,48 @@ def score_hypothesis_welfare(
     normalized = gradient_sum / (gradient_sum + k)
 
     return min(1.0, max(0.0, normalized))
+
+
+def compute_gap_urgency(gap: "Gap", phi_metrics: Dict[str, float]) -> float:  # type: ignore
+    """
+    Compute investigative urgency for a detected gap.
+
+    Urgency = Σ(Φ_gradients) × epistemic_confidence
+
+    Gaps threatening scarce constructs with high epistemic confidence
+    are most urgent.
+
+    Args:
+        gap: Detected information gap
+        phi_metrics: Current Φ construct levels
+
+    Returns:
+        Urgency score (unbounded, but typically in [0, 20] range)
+
+    Examples:
+        >>> gap = Gap(
+        ...     type=GapType.TEMPORAL,
+        ...     description="Resource gap 2013-2017",
+        ...     confidence=0.9,
+        ...     location="doc.pdf",
+        ...     threatened_constructs=("c",),
+        ... )
+        >>> compute_gap_urgency(gap, {"c": 0.1})  # scarce
+        12.87  # high urgency
+        >>> compute_gap_urgency(gap, {"c": 0.9})  # abundant
+        0.14  # low urgency
+    """
+    if not gap.threatened_constructs:
+        constructs = infer_threatened_constructs(gap.description)
+    else:
+        constructs = gap.threatened_constructs
+
+    if not constructs:
+        return 0.0
+
+    gradient_sum = sum(
+        phi_gradient_wrt(construct, phi_metrics)
+        for construct in constructs
+    )
+
+    return gradient_sum * gap.confidence

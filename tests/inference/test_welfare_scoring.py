@@ -1,6 +1,7 @@
 """Unit tests for welfare scoring module."""
-from src.inference.welfare_scoring import infer_threatened_constructs, phi_gradient_wrt, score_hypothesis_welfare
+from src.inference.welfare_scoring import infer_threatened_constructs, phi_gradient_wrt, score_hypothesis_welfare, compute_gap_urgency
 from src.detective.hypothesis import Hypothesis
+from src.core.types import Gap, GapType
 from dataclasses import replace
 
 
@@ -96,3 +97,67 @@ class TestScoreHypothesisWelfare:
 
         score = score_hypothesis_welfare(h, {"c": 0.2})
         assert score > 0.3  # inferred "c" from "resource"
+
+
+class TestComputeGapUrgency:
+    def test_urgency_high_when_confidence_and_welfare_both_high(self):
+        """High urgency when gap has high confidence and threatens scarce construct."""
+        gap = Gap(
+            type=GapType.TEMPORAL,
+            description="Resource allocation gap 2013-2017",
+            confidence=0.9,
+            location="financial_records.pdf",
+            threatened_constructs=("c",),
+        )
+
+        urgency = compute_gap_urgency(gap, {"c": 0.1})  # scarce
+        assert urgency > 1.0  # high urgency (gradient ~1.43 * confidence 0.9 ≈ 1.29)
+
+    def test_urgency_low_when_welfare_low(self):
+        """Low urgency when gap has no welfare threat."""
+        gap = Gap(
+            type=GapType.EVIDENTIAL,
+            description="Typo in document",
+            confidence=0.95,
+            location="memo.txt",
+            threatened_constructs=(),
+        )
+
+        urgency = compute_gap_urgency(gap, {})
+        assert urgency == 0.0
+
+    def test_urgency_scales_with_confidence(self):
+        """Urgency scales with epistemic confidence."""
+        gap_high_conf = Gap(
+            type=GapType.TEMPORAL,
+            description="Resource gap",
+            confidence=0.9,
+            location="doc.pdf",
+            threatened_constructs=("c",),
+        )
+        gap_low_conf = Gap(
+            type=GapType.TEMPORAL,
+            description="Resource gap",
+            confidence=0.3,
+            location="doc.pdf",
+            threatened_constructs=("c",),
+        )
+
+        phi_metrics = {"c": 0.3}
+        urgency_high = compute_gap_urgency(gap_high_conf, phi_metrics)
+        urgency_low = compute_gap_urgency(gap_low_conf, phi_metrics)
+
+        assert urgency_high > urgency_low
+
+    def test_urgency_infers_constructs_if_not_set(self):
+        """Infers threatened constructs from description if not set."""
+        gap = Gap(
+            type=GapType.TEMPORAL,
+            description="Evidence of resource deprivation",
+            confidence=0.8,
+            location="doc.pdf",
+            # threatened_constructs defaults to ()
+        )
+
+        urgency = compute_gap_urgency(gap, {"c": 0.2})
+        assert urgency > 0.5  # inferred "c" from "resource"
