@@ -4,7 +4,7 @@ Welfare impact scoring for hypotheses and gaps.
 Maps investigative findings to Φ(humanity) constructs and computes
 welfare relevance via Φ gradients.
 """
-from typing import Tuple
+from typing import Dict, Tuple
 
 # Keyword patterns for construct threat inference
 # Based on humanity.md definitions and constitution.md usage
@@ -80,3 +80,36 @@ def infer_threatened_constructs(text: str) -> Tuple[str, ...]:
             threatened.append(construct)
 
     return tuple(sorted(threatened))
+
+
+def phi_gradient_wrt(construct: str, metrics: Dict[str, float]) -> float:
+    """
+    Compute ∂Φ/∂x for construct x, given current metric levels.
+
+    Simplified gradient approximation using Nash SWF structure from humanity.md.
+    For construct with current value x_i and Nash weight θ_i:
+        ∂Φ/∂x ≈ (θ / x) at current level
+
+    Low values → high gradients → high priority (Rawlsian maximin intuition).
+
+    Args:
+        construct: Symbol from humanity.md ("c", "kappa", "j", "p", "eps", "lam", "xi")
+        metrics: Current Φ metric levels, each in [0, 1]
+
+    Returns:
+        Gradient value (unbounded, but typically in [0.1, 100] range)
+
+    Examples:
+        >>> phi_gradient_wrt("c", {"c": 0.1})  # care is very scarce
+        1.43  # high gradient → high priority
+        >>> phi_gradient_wrt("c", {"c": 0.9})  # care is abundant
+        0.16  # low gradient → low priority
+    """
+    x = metrics.get(construct, 0.5)  # default to mid-level if unknown
+    theta = 1.0 / 7.0  # equal Nash weights (default from humanity.md Section 2)
+
+    # Floor to prevent division by zero and extreme gradients
+    # Using 0.01 floor → max gradient = θ/0.01 = 14.3 for single construct
+    x_clamped = max(0.01, min(1.0, x))
+
+    return theta / x_clamped
