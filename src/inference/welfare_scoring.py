@@ -131,6 +131,25 @@ def recovery_aware_input(
     return x_i + (floor_i - x_i) * recovery_potential
 
 
+ALL_CONSTRUCTS = ("c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi")
+
+
+def equity_weights(metrics: Dict[str, float]) -> Dict[str, float]:
+    """
+    Compute equity-adjusted weights via inverse deprivation.
+
+    w_i = (1/x_i) / sum(1/x_j) for all 8 constructs.
+    Weights shift dynamically toward the most deprived construct.
+    Replaces symmetric Nash theta=1/8 with Rawlsian maximin.
+    """
+    inv = {
+        c: 1.0 / max(0.01, metrics.get(c, 0.5))
+        for c in ALL_CONSTRUCTS
+    }
+    inv_sum = sum(inv.values())
+    return {c: inv[c] / inv_sum for c in ALL_CONSTRUCTS}
+
+
 def _keyword_fallback(text: str) -> Tuple[str, ...]:
     """
     Infer threatened constructs via keyword matching (fallback method).

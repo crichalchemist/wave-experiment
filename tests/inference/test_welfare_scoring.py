@@ -218,3 +218,41 @@ class TestRecoveryAwareInput:
         assert CONSTRUCT_FLOORS["j"] == 0.10
         assert CONSTRUCT_FLOORS["p"] == 0.10
         assert CONSTRUCT_FLOORS["eps"] == 0.10
+
+
+class TestEquityWeights:
+    """Inverse-deprivation weights: w_i = (1/x_i) / sum(1/x_j)."""
+
+    def test_equal_inputs_equal_weights(self):
+        """When all constructs equal, weights are equal (1/8)."""
+        from src.inference.welfare_scoring import equity_weights
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        weights = equity_weights(metrics)
+        for w in weights.values():
+            assert abs(w - 1/8) < 0.001
+
+    def test_deprived_construct_gets_higher_weight(self):
+        """Most deprived construct gets highest weight."""
+        from src.inference.welfare_scoring import equity_weights
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        metrics["c"] = 0.1  # care is deprived
+        weights = equity_weights(metrics)
+        assert weights["c"] > weights["kappa"]
+        assert weights["c"] > 0.3  # significant shift toward care
+
+    def test_weights_sum_to_one(self):
+        """Weights always sum to 1."""
+        from src.inference.welfare_scoring import equity_weights
+        metrics = {"c": 0.1, "kappa": 0.3, "j": 0.5, "p": 0.7,
+                   "eps": 0.2, "lam_L": 0.4, "lam_P": 0.6, "xi": 0.8}
+        weights = equity_weights(metrics)
+        assert abs(sum(weights.values()) - 1.0) < 0.001
+
+    def test_care_at_01_others_05_care_weight_dominates(self):
+        """c=0.1, others=0.5 -> care weight ~0.42."""
+        from src.inference.welfare_scoring import equity_weights
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        metrics["c"] = 0.1
+        weights = equity_weights(metrics)
+        # 1/0.1 = 10, 7*(1/0.5) = 14, total=24, c weight = 10/24 ~ 0.417
+        assert weights["c"] > 0.4
