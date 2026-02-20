@@ -72,14 +72,16 @@ Arrow's Impossibility Theorem (1951) proved that no aggregation rule can satisfy
 
 This multiplicative structure encodes a Rawlsian maximin intuition (Rawls 1971): a society with perfect care but zero empathy has near-zero welfare.
 
-### 1.3 Our Extension: Nash + Capabilities + Care Ethics
+### 1.3 Our Extension: Nash + Capabilities + Care Ethics + Ubuntu
 
 We extend the Nash SWF with:
 1. **Capability-theoretic inputs** (Sen 1999, Nussbaum 2000): Eight dimensions of functioning
-2. **Inequality sensitivity** (Atkinson 1970): Inputs are population-weighted complements to Atkinson inequality indices
-3. **Care ethics integration** (hooks 2000, Gilligan 1982): Love as generative, not defensive
-4. **Synergy coupling** (Alkire & Foster 2011): Intersectional welfare gains from paired constructs
-5. **Divergence penalties:** Explicitly penalize care-without-love and similar mismatches
+2. **Equity weighting** (Rawls 1971, Atkinson 1970): Inverse-deprivation weights that dynamically prioritize the most deprived construct, replacing symmetric equal weights
+3. **Community solidarity multiplier** (Ubuntu philosophy): λ_L as meta-construct — welfare emerges from relational context, not individual metrics in isolation
+4. **Recovery-aware floors**: Constructs below hard floors receive community-mediated recovery potential. Key insight: care doesn't begin the uptick without community intervention
+5. **Care ethics integration** (hooks 2000, Gilligan 1982): Love as generative, not defensive
+6. **Ubuntu synergy coupling** (Alkire & Foster 2011): Renamed from synergy to make Ubuntu grounding explicit (η raised from 0.05 to 0.10)
+7. **Divergence penalties:** Explicitly penalize care-without-love and similar mismatches
 
 ---
 
@@ -196,19 +198,21 @@ hooks' insight: Safeguarding ≠ developmental support. A paternalistic state ca
 
 ## 3. Mathematical Formulation
 
-### 3.1 Core Function (Nash Social Welfare Structure)
+### 3.1 Core Function (Equity-Weighted, Community-Mediated)
 
 ```
-Φ(humanity) = [∏ᵢ (xᵢ^αᵢ)^θᵢ] · Ψ_synergy · (1 - Ψ_penalty)
+Φ(humanity) = f(λ_L) · [∏ᵢ (x̃ᵢ)^wᵢ] · Ψ_ubuntu · (1 - Ψ_penalty)
 ```
 
 where:
 - **i ∈ {c, κ, j, p, ε, λ_L, λ_P, ξ}** — the eight constructs
-- **xᵢ ∈ [0,1]** — population-weighted Atkinson complement for construct i
-- **αᵢ** — exponent encoding marginal returns (α < 1 = concave, α = 1 = linear, α > 1 = convex)
-- **θᵢ** — Nash aggregation weight (default: 1/8 for equal weighting, Σθᵢ = 1)
-- **Ψ_synergy** — multiplicative synergy term (geometric mean of paired constructs)
-- **Ψ_penalty** — additive penalty for divergence within pairs
+- **f(λ_L) = λ_L^γ** (γ = 0.5) — Community solidarity multiplier. Ubuntu substrate: when community is low, all welfare degrades multiplicatively. (See §3.1.1)
+- **x̃ᵢ** — Recovery-aware effective inputs. Constructs above their hard floor pass through unchanged; below floor, recovery depends on trajectory (dx/dt) and community capacity (λ_L^0.5). (See §3.1.2)
+- **wᵢ = (1/x̃ᵢ) / Σⱼ(1/x̃ⱼ)** — Equity-adjusted weights (inverse deprivation). Replaces symmetric Nash θ = 1/8 with Rawlsian maximin: weights shift dynamically toward the most deprived construct. (See §3.1.3)
+- **Ψ_ubuntu** — Ubuntu synergy term (η = 0.10, renamed from Ψ_synergy). Welfare gains emerge from relationships between paired constructs, not isolation. (See §3.3)
+- **Ψ_penalty** — Divergence penalty (μ = 0.15) for structural distortions. (See §3.4)
+
+**Philosophical synthesis:** The product `∏(x̃ᵢ)^wᵢ` encodes Western capability theory (Sen 1999, Nussbaum 2000) — individual constructs with equity priority. The multiplier `f(λ_L)` and synergy `Ψ_ubuntu` encode Ubuntu relational philosophy ("umuntu ngumuntu ngabantu" — a person is a person through other persons). Neither term alone produces Φ.
 
 **Normalization:** Φ ∈ [0,1] by construction.
 
@@ -232,13 +236,13 @@ On domain [0,1]:
 
 This achieves the Rawlsian maximin intuition: improve the worst-off first.
 
-### 3.3 Synergy Term (Intersectional Coupling)
+### 3.3 Ubuntu Synergy Term (Relational Coupling)
 
 ```
-Ψ_synergy = 1 + η · [√(c · λ_L) + √(κ · λ_P) + √(j · p) + √(ε · ξ)]
+Ψ_ubuntu = 1 + η · [√(c · λ_L) + √(κ · λ_P) + √(j · p) + √(ε · ξ)]
 ```
 
-where **η = 0.05** (calibrated for ~10% boost at balanced moderate levels).
+where **η = 0.10** (raised from 0.05 to reflect Ubuntu's centrality in the revised formula).
 
 **Geometric mean (√)** penalizes imbalance within pairs more than linear coupling:
 - √(0.9 · 0.1) ≈ 0.30

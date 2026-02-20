@@ -31,20 +31,22 @@ All inputs are **population-weighted Atkinson complements** (1 − A_ε) with ex
 
 ---
 
-## Core Objective Function (Nash Social Welfare Formulation)
+## Core Objective Function (Equity-Weighted, Community-Mediated)
 
-**Multiplicative structure to prevent dimensional collapse:**
+**Revised formula — Western capability theory + Ubuntu relational philosophy:**
 
 ```
-Φ(humanity) = [ PRODUCT_{i in {c,κ,j,p,ε,λ_L,λ_P,ξ}} (x_i^{α_i})^{θ_i} ] · Ψ_synergy · (1 - Ψ_penalty)
+Φ(humanity) = f(λ_L) · [ PRODUCT_{i} (x̃_i)^{w_i} ] · Ψ_ubuntu · (1 - Ψ_penalty)
 ```
 
 where:
-- **x_i** are the eight input constructs
-- **α_i** are exponents encoding marginal returns structure (see below)
-- **θ_i** are Nash SWF aggregation weights (sum to 1, default equal = 1/8 each)
-- **Ψ_synergy** is the synergy coupling term (multiplicative)
-- **Ψ_penalty** is the divergence penalty term (additive)
+- **f(λ_L) = λ_L^γ** (γ=0.5) — Community solidarity multiplier. Ubuntu substrate: welfare emerges from relational context, not individual metrics in isolation. When λ_L is low, the entire function degrades.
+- **x̃_i** — Recovery-aware effective inputs. Above their hard floor, constructs pass through unchanged. Below floor, recovery potential depends on both the construct's trajectory (dx/dt) and community capacity (λ_L^0.5). Key insight: care doesn't begin the uptick without community intervention.
+- **w_i = (1/x̃_i) / Σ(1/x̃_j)** — Equity-adjusted weights (inverse deprivation). Weights shift dynamically toward the most deprived construct. Replaces symmetric Nash θ=1/8 with Rawlsian maximin.
+- **Ψ_ubuntu** — Ubuntu synergy term (η=0.10, renamed from Ψ_synergy). Welfare gains emerge from relationships between paired constructs.
+- **Ψ_penalty** — Divergence penalty (μ=0.15). Penalizes care-without-love and similar structural distortions.
+
+**Philosophical synthesis:** The product term `Π(x̃_i)^(w_i)` is Western (individual constructs, capability theory). The multiplier `f(λ_L)` and synergy `Ψ_ubuntu` are Ubuntu (relational substrate). Neither term alone produces Φ. As bell hooks writes: "the will to extend one's self for the purpose of nurturing one's own or another's spiritual growth" — an individual act (Western) that only makes sense relationally (Ubuntu).
 
 **Normalization:** Φ ∈ [0, 1] by construction when all x_i ∈ [0, 1].
 
