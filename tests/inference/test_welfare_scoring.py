@@ -289,3 +289,65 @@ class TestCommunityMultiplier:
         low = community_multiplier(0.1)
         high = community_multiplier(0.8)
         assert low < 0.5 * high
+
+
+class TestUbuntuSynergy:
+    """Psi_ubuntu: construct pairs gain meaning through relationships."""
+
+    def test_balanced_pairs_above_one(self):
+        """Balanced pairs produce synergy > 1."""
+        from src.inference.welfare_scoring import ubuntu_synergy
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        result = ubuntu_synergy(metrics)
+        assert result > 1.0
+
+    def test_zero_construct_kills_its_pair(self):
+        """A zeroed construct kills its paired synergy contribution."""
+        from src.inference.welfare_scoring import ubuntu_synergy
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        zeroed = dict(balanced)
+        zeroed["c"] = 0.0  # kills c*lam_L pair
+        assert ubuntu_synergy(balanced) > ubuntu_synergy(zeroed)
+
+    def test_verification_criterion_5(self):
+        """Design doc criterion 5: balanced pairs score higher than unbalanced at same average."""
+        from src.inference.welfare_scoring import ubuntu_synergy
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        unbalanced = dict(balanced)
+        unbalanced["c"] = 0.9
+        unbalanced["lam_L"] = 0.1  # same sum but unbalanced
+        assert ubuntu_synergy(balanced) > ubuntu_synergy(unbalanced)
+
+
+class TestDivergencePenalty:
+    """Psi_penalty: penalize care-without-love and similar mismatches."""
+
+    def test_no_penalty_when_balanced(self):
+        """Balanced pairs have zero penalty."""
+        from src.inference.welfare_scoring import divergence_penalty
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert divergence_penalty(metrics) == 0.0
+
+    def test_paternalism_penalty(self):
+        """High care + low love triggers penalty (paternalism detection)."""
+        from src.inference.welfare_scoring import divergence_penalty
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        metrics["c"] = 0.9
+        metrics["lam_L"] = 0.1
+        assert divergence_penalty(metrics) > 0.0
+
+    def test_verification_criterion_6(self):
+        """Design doc criterion 6: high c + low lam_L scores lower than moderate c + moderate lam_L."""
+        from src.inference.welfare_scoring import divergence_penalty
+        paternalistic = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        paternalistic["c"] = 0.9
+        paternalistic["lam_L"] = 0.1
+        moderate = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert divergence_penalty(paternalistic) > divergence_penalty(moderate)
+
+    def test_penalty_bounded(self):
+        """Penalty is bounded below 1."""
+        from src.inference.welfare_scoring import divergence_penalty
+        extreme = {"c": 1.0, "kappa": 1.0, "j": 1.0, "p": 0.0,
+                   "eps": 0.0, "lam_L": 0.0, "lam_P": 0.0, "xi": 0.0}
+        assert divergence_penalty(extreme) < 1.0

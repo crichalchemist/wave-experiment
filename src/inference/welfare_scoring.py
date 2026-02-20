@@ -164,6 +164,46 @@ def community_multiplier(lam_L: float) -> float:
     return max(0.01, lam_L) ** GAMMA
 
 
+ETA = 0.10   # Ubuntu synergy coupling strength
+MU = 0.15    # Divergence penalty coefficient
+
+# Paired constructs: (a, b) — welfare gains emerge from relationships
+CONSTRUCT_PAIRS = [
+    ("c", "lam_L"),      # Care x Love: material provision + developmental extension
+    ("kappa", "lam_P"),   # Compassion x Protection: emergency response + safeguarding
+    ("j", "p"),           # Joy x Purpose: positive affect + goal-alignment
+    ("eps", "xi"),        # Empathy x Truth: perspective-taking + epistemic integrity
+]
+
+
+def ubuntu_synergy(metrics: Dict[str, float]) -> float:
+    """
+    Ubuntu synergy term.
+
+    Psi_ubuntu = 1 + eta * [sqrt(c*lam_L) + sqrt(kappa*lam_P) + sqrt(j*p) + sqrt(eps*xi)]
+    Welfare gains emerge from relationships between constructs, not isolation.
+    """
+    pair_sum = sum(
+        math.sqrt(max(0.0, metrics.get(a, 0.5)) * max(0.0, metrics.get(b, 0.5)))
+        for a, b in CONSTRUCT_PAIRS
+    )
+    return 1.0 + ETA * pair_sum
+
+
+def divergence_penalty(metrics: Dict[str, float]) -> float:
+    """
+    Divergence penalty for paired construct mismatches.
+
+    Psi_penalty = mu * [(c-lam_L)^2 + (kappa-lam_P)^2 + (j-p)^2 + (eps-xi)^2] / 4
+    Penalizes care-without-love (paternalism) and similar structural distortions.
+    """
+    sq_sum = sum(
+        (metrics.get(a, 0.5) - metrics.get(b, 0.5)) ** 2
+        for a, b in CONSTRUCT_PAIRS
+    )
+    return MU * sq_sum / len(CONSTRUCT_PAIRS)
+
+
 def _keyword_fallback(text: str) -> Tuple[str, ...]:
     """
     Infer threatened constructs via keyword matching (fallback method).
