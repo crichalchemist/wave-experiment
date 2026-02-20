@@ -14,7 +14,7 @@ class TestInferThreatenedConstructs:
     def test_protection_pattern(self):
         text = "Redacted correspondence about safeguarding protocols"
         constructs = infer_threatened_constructs(text)
-        assert "lam" in constructs
+        assert "lam_P" in constructs
 
     def test_truth_pattern(self):
         text = "Evidence of systematic suppression of documents"
@@ -25,7 +25,7 @@ class TestInferThreatenedConstructs:
         text = "Resource deprivation and ongoing violence against vulnerable populations"
         constructs = infer_threatened_constructs(text)
         assert "c" in constructs
-        assert "lam" in constructs
+        assert "lam_P" in constructs
 
     def test_no_match(self):
         text = "Meeting scheduled for Tuesday"
@@ -72,13 +72,13 @@ class TestScoreHypothesisWelfare:
     def test_multiple_constructs_sum_gradients(self):
         """Multiple constructs sum their gradients."""
         h = Hypothesis.create("Resource deprivation and violence", 0.8)
-        h = replace(h, threatened_constructs=("c", "lam"))
+        h = replace(h, threatened_constructs=("c", "lam_P"))
 
         score_single = score_hypothesis_welfare(
             replace(h, threatened_constructs=("c",)),
-            {"c": 0.3, "lam": 0.3}
+            {"c": 0.3, "lam_P": 0.3}
         )
-        score_double = score_hypothesis_welfare(h, {"c": 0.3, "lam": 0.3})
+        score_double = score_hypothesis_welfare(h, {"c": 0.3, "lam_P": 0.3})
 
         assert score_double > score_single  # more constructs → higher score
 
@@ -160,4 +160,4 @@ class TestComputeGapUrgency:
         )
 
         urgency = compute_gap_urgency(gap, {"c": 0.2})
-        assert urgency > 0.5  # inferred "c" from "resource"
+        assert urgency >= 0.5  # inferred "c" from "resource" (1/8 / 0.2 * 0.8 = 0.5)

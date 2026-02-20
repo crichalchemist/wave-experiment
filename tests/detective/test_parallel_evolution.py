@@ -136,7 +136,7 @@ async def test_welfare_scoring_applied_to_evolved_hypotheses():
     ]
 
     provider = MockProvider(response="confidence: 0.7")
-    phi_metrics = {"c": 0.2, "lam": 0.5}  # care is scarce
+    phi_metrics = {"c": 0.2, "lam_P": 0.5}  # care is scarce
 
     results = await evolve_parallel(
         hypothesis=root,
@@ -190,7 +190,7 @@ async def test_high_welfare_relevance_for_urgent_findings():
 
     evidence = ["Additional documentation showing funding shortfalls"]
     provider = MockProvider(response="confidence: 0.5")
-    phi_metrics = {"c": 0.1, "lam": 0.2}  # scarce constructs
+    phi_metrics = {"c": 0.1, "lam_P": 0.2}  # scarce constructs
 
     results = await evolve_parallel(
         hypothesis=root,

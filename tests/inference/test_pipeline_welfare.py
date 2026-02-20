@@ -68,7 +68,7 @@ def test_score_gaps_welfare_sorts_by_urgency():
         ),
     ]
 
-    phi_metrics = {"c": 0.1, "lam": 0.2, "xi": 0.3}  # all scarce
+    phi_metrics = {"c": 0.1, "lam_P": 0.2, "xi": 0.3}  # all scarce
     scored = score_gaps_welfare(gaps, phi_metrics)
 
     # Should be sorted by welfare urgency

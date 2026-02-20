@@ -36,8 +36,8 @@ def test_construct_inference():
 
     test_cases = [
         ("Evidence of resource deprivation", ("c",)),
-        ("Testimony about ongoing violence", ("lam",)),
-        ("Suppressed testimony and concealed evidence", ("lam", "xi")),
+        ("Testimony about ongoing violence", ("lam_P",)),
+        ("Suppressed testimony and concealed evidence", ("lam_P", "xi")),
         ("Meeting scheduled for Tuesday", ()),
     ]
 
@@ -56,7 +56,7 @@ def test_phi_gradient():
     print("TEST 2: Φ Gradient Computation")
     print("="*60)
 
-    phi_metrics = {"c": 0.1, "lam": 0.5, "xi": 0.9}
+    phi_metrics = {"c": 0.1, "lam_P": 0.5, "xi": 0.9}
 
     for construct, x_value in phi_metrics.items():
         gradient = phi_gradient_wrt(construct, phi_metrics)
@@ -76,7 +76,7 @@ def test_hypothesis_welfare_scoring():
     print("TEST 3: Hypothesis Welfare Scoring")
     print("="*60)
 
-    phi_metrics = {"c": 0.2, "lam": 0.3, "xi": 0.5}
+    phi_metrics = {"c": 0.2, "lam_P": 0.3, "xi": 0.5}
 
     test_cases = [
         ("Evidence of resource deprivation affecting vulnerable populations", 0.8),
@@ -102,7 +102,7 @@ def test_gap_urgency():
     print("TEST 4: Gap Urgency Computation")
     print("="*60)
 
-    phi_metrics = {"c": 0.1, "lam": 0.2, "xi": 0.3}
+    phi_metrics = {"c": 0.1, "lam_P": 0.2, "xi": 0.3}
 
     gaps = [
         Gap(
@@ -143,7 +143,7 @@ def test_gap_prioritization():
     print("TEST 5: Gap Prioritization (score_gaps_welfare)")
     print("="*60)
 
-    phi_metrics = {"c": 0.1, "lam": 0.2, "xi": 0.3}
+    phi_metrics = {"c": 0.1, "lam_P": 0.2, "xi": 0.3}
 
     gaps = [
         Gap(
@@ -185,7 +185,7 @@ async def test_parallel_evolution_welfare():
     print("TEST 6: Parallel Evolution with Welfare Scoring")
     print("="*60)
 
-    phi_metrics = {"c": 0.2, "lam": 0.3}
+    phi_metrics = {"c": 0.2, "lam_P": 0.3}
 
     root = Hypothesis.create("Temporal gap in records", 0.5)
     evidence = [
@@ -228,7 +228,7 @@ def test_constitutional_filtering():
     print("TEST 7: Constitutional Warmup Filtering")
     print("="*60)
 
-    phi_metrics = {"c": 0.3, "lam": 0.3}
+    phi_metrics = {"c": 0.3, "lam_P": 0.3}
 
     test_cases = [
         ("Evidence of resource deprivation affecting vulnerable populations", True),

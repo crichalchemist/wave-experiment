@@ -176,7 +176,8 @@ def run_constitutional_warmup(
         "j": 0.5,      # joy (positive affect)
         "p": 0.5,      # purpose (goal alignment)
         "eps": 0.5,    # empathy (perspective-taking)
-        "lam": 0.5,    # protection (safeguarding)
+        "lam_L": 0.5,  # love (growth, mutual aid)
+        "lam_P": 0.5,  # protection (safeguarding)
         "xi": 0.5,     # truth (epistemic integrity)
     }
 

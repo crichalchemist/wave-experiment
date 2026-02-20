@@ -81,10 +81,10 @@ def test_gap_with_welfare_fields():
         confidence=0.8,
         location="doc.pdf",
         welfare_impact=5.2,
-        threatened_constructs=("c", "lam"),
+        threatened_constructs=("c", "lam_P"),
     )
     assert gap.welfare_impact == 5.2
-    assert gap.threatened_constructs == ("c", "lam")
+    assert gap.threatened_constructs == ("c", "lam_P")
 
 
 def test_gap_welfare_fields_default_to_zero_and_empty():

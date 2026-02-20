@@ -44,7 +44,7 @@ class Gap:
 
     # NEW: Welfare grounding fields
     welfare_impact: float = 0.0  # Σ(Φ_gradients) × confidence
-    threatened_constructs: tuple[str, ...] = ()  # e.g., ("c", "lam", "xi")
+    threatened_constructs: tuple[str, ...] = ()  # e.g., ("c", "lam_P", "xi")
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):

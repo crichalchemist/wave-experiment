@@ -100,7 +100,7 @@ def test_evolve_endpoint_accepts_phi_metrics(client: TestClient) -> None:
         "/evolve",
         json={
             "evidence_path": "Evidence of resource deprivation",
-            "phi_metrics": {"c": 0.2, "lam": 0.3},
+            "phi_metrics": {"c": 0.2, "lam_P": 0.3},
         },
     )
 

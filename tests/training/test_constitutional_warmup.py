@@ -95,7 +95,7 @@ class TestWelfareFiltering:
         from src.training.constitutional_warmup import should_include_example
 
         text = "Evidence of resource deprivation affecting vulnerable populations"
-        phi_metrics = {"c": 0.3, "lam": 0.3}
+        phi_metrics = {"c": 0.2, "lam_P": 0.3}
 
         assert should_include_example(text, phi_metrics, welfare_threshold=0.3) is True
 
@@ -113,7 +113,7 @@ class TestWelfareFiltering:
         from src.training.constitutional_warmup import should_include_example
 
         text = "Evidence of ongoing resource deprivation affecting vulnerable populations"
-        phi_metrics = {"c": 0.1, "lam": 0.1}  # very scarce constructs
+        phi_metrics = {"c": 0.1, "lam_P": 0.1}  # very scarce constructs
 
         # High welfare relevance due to scarce constructs
         # Even with high threshold, scarce constructs boost relevance

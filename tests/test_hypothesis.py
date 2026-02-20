@@ -34,10 +34,10 @@ def test_hypothesis_with_welfare_fields():
     h = replace(
         h,
         welfare_relevance=0.75,
-        threatened_constructs=("c", "lam"),
+        threatened_constructs=("c", "lam_P"),
     )
     assert h.welfare_relevance == 0.75
-    assert h.threatened_constructs == ("c", "lam")
+    assert h.threatened_constructs == ("c", "lam_P")
 
 
 def test_hypothesis_welfare_fields_default():

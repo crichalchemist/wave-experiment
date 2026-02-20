@@ -17,7 +17,7 @@ class Hypothesis:
 
     # NEW: Welfare grounding fields
     welfare_relevance: float = 0.0  # [0, 1] score from welfare_scoring
-    threatened_constructs: tuple[str, ...] = ()  # e.g., ("c", "lam")
+    threatened_constructs: tuple[str, ...] = ()  # e.g., ("c", "lam_P")
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):
