@@ -2,13 +2,16 @@
 HuggingFace dataset loader for constitutional training data.
 
 Loads legal, court, and regulatory text from public HF datasets.
-Returns normalized dicts with text, source, and metadata preserved —
-provenance tracking is required for all training examples per the
-constitution's standpoint transparency principle.
+Returns normalized dicts with text, source, and metadata preserved.
 """
 from __future__ import annotations
 
 from typing import Any
+
+try:
+    from datasets import load_dataset
+except ImportError:
+    load_dataset = None  # type: ignore[assignment]
 
 
 def load_hf_legal_batch(
@@ -21,22 +24,9 @@ def load_hf_legal_batch(
 ) -> list[dict[str, Any]]:
     """
     Load a batch from a HuggingFace dataset, normalizing to {text, source, metadata}.
-
-    Args:
-        dataset_name: HF dataset identifier (e.g., "pile-of-law/pile-of-law").
-        split: Dataset split ("train", "test", "validation").
-        max_examples: Maximum number of examples to return.
-        text_field: Name of the field containing the document text.
-        config_name: Optional dataset configuration name.
-        keyword_filter: If provided, only include examples containing this keyword.
-
-    Returns:
-        List of dicts: {text: str, source: str, metadata: dict}
     """
-    try:
-        from datasets import load_dataset
-    except ImportError as e:
-        raise ImportError("pip install datasets") from e
+    if load_dataset is None:
+        raise ImportError("pip install datasets")
 
     kwargs: dict[str, Any] = {"split": split, "streaming": True}
     if config_name:

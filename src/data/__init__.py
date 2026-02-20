@@ -1,1 +1,1 @@
-"""Package initialization."""
+"""Data loading and dataset management."""

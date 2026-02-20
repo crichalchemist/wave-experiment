@@ -1,54 +1,108 @@
 """Tests for dataset sourcing pipeline."""
-import pytest
+from unittest.mock import MagicMock
 
+
+# --- Task 3a: HuggingFace Loader ---
 
 def test_hf_loader_import():
     from src.data.sourcing.hf_loader import load_hf_legal_batch
     assert callable(load_hf_legal_batch)
 
 
-def test_hf_loader_returns_list():
-    """Loader returns list of dicts with required keys."""
-    from src.data.sourcing.hf_loader import load_hf_legal_batch
+def test_hf_loader_returns_list_with_mock(monkeypatch):
+    """Loader returns list of dicts with required keys (mocked, no network)."""
+    from src.data.sourcing import hf_loader
 
-    # Use cais/mmlu which has data-only format (no deprecated Python scripts)
-    try:
-        batch = load_hf_legal_batch(
-            dataset_name="cais/mmlu",
-            config_name="all",
-            split="test",
-            max_examples=5,
-            text_field="question",
-        )
-        assert isinstance(batch, list)
-        assert len(batch) <= 5
-        if batch:
-            assert "text" in batch[0]
-            assert "source" in batch[0]
-            assert "metadata" in batch[0]
-    except Exception as e:
-        # If dataset unavailable (network, auth, etc.), skip gracefully
-        pytest.skip(f"Dataset unavailable: {e}")
+    class FakeDataset:
+        def __iter__(self):
+            yield {"text": "Court document about financial transfers.", "id": 1}
+            yield {"text": "Legal analysis of jurisdiction.", "id": 2}
+
+    monkeypatch.setattr(
+        "src.data.sourcing.hf_loader.load_dataset",
+        lambda *a, **kw: FakeDataset(),
+    )
+    batch = hf_loader.load_hf_legal_batch(
+        dataset_name="fake/dataset",
+        split="train",
+        max_examples=5,
+        text_field="text",
+    )
+    assert isinstance(batch, list)
+    assert len(batch) == 2
+    assert "text" in batch[0]
+    assert "source" in batch[0]
+    assert "metadata" in batch[0]
 
 
-def test_hf_loader_metadata_preserved():
-    from src.data.sourcing.hf_loader import load_hf_legal_batch
+def test_hf_loader_metadata_preserved(monkeypatch):
+    from src.data.sourcing import hf_loader
 
-    try:
-        batch = load_hf_legal_batch(
-            dataset_name="cais/mmlu",
-            config_name="all",
-            split="test",
-            max_examples=3,
-            text_field="question",
-        )
-        if batch:
-            meta = batch[0]["metadata"]
-            assert "dataset" in meta
-            assert "split" in meta
-    except Exception as e:
-        pytest.skip(f"Dataset unavailable: {e}")
+    class FakeDataset:
+        def __iter__(self):
+            yield {"text": "Document text.", "extra_field": "extra_val"}
 
+    monkeypatch.setattr(
+        "src.data.sourcing.hf_loader.load_dataset",
+        lambda *a, **kw: FakeDataset(),
+    )
+    batch = hf_loader.load_hf_legal_batch(
+        dataset_name="test/dataset",
+        config_name="test_config",
+        split="train",
+        max_examples=3,
+        text_field="text",
+    )
+    assert len(batch) == 1
+    meta = batch[0]["metadata"]
+    assert meta["dataset"] == "test/dataset"
+    assert meta["split"] == "train"
+    assert meta["config"] == "test_config"
+
+
+def test_hf_loader_keyword_filter(monkeypatch):
+    from src.data.sourcing import hf_loader
+
+    class FakeDataset:
+        def __iter__(self):
+            yield {"text": "Financial records from 2003."}
+            yield {"text": "Unrelated weather report."}
+            yield {"text": "Financial audit of institution."}
+
+    monkeypatch.setattr(
+        "src.data.sourcing.hf_loader.load_dataset",
+        lambda *a, **kw: FakeDataset(),
+    )
+    batch = hf_loader.load_hf_legal_batch(
+        dataset_name="fake/ds",
+        split="train",
+        max_examples=10,
+        text_field="text",
+        keyword_filter="financial",
+    )
+    assert len(batch) == 2
+    assert all("financial" in b["text"].lower() for b in batch)
+
+
+def test_hf_loader_respects_max(monkeypatch):
+    from src.data.sourcing import hf_loader
+
+    class FakeDataset:
+        def __iter__(self):
+            for i in range(100):
+                yield {"text": f"Document {i}."}
+
+    monkeypatch.setattr(
+        "src.data.sourcing.hf_loader.load_dataset",
+        lambda *a, **kw: FakeDataset(),
+    )
+    batch = hf_loader.load_hf_legal_batch(
+        dataset_name="fake/ds", split="train", max_examples=5, text_field="text",
+    )
+    assert len(batch) == 5
+
+
+# --- Task 3b: DOJ / CourtListener Loader ---
 
 def test_doj_loader_import():
     from src.data.sourcing.doj_loader import load_courtlistener_batch
@@ -57,10 +111,8 @@ def test_doj_loader_import():
 
 def test_doj_loader_returns_list(monkeypatch):
     """Loader returns list even when API returns empty results."""
-    import httpx
-    from src.data.sourcing.doj_loader import load_courtlistener_batch
+    from src.data.sourcing import doj_loader
 
-    # Mock httpx to avoid network in unit tests
     class _MockResponse:
         def raise_for_status(self): pass
         def json(self): return {"results": [], "count": 0}
@@ -69,12 +121,13 @@ def test_doj_loader_returns_list(monkeypatch):
         "src.data.sourcing.doj_loader._httpx_get",
         lambda url, **kw: _MockResponse(),
     )
-    results = load_courtlistener_batch(case_name="Maxwell", max_examples=5)
+    results = doj_loader.load_courtlistener_batch(case_name="Maxwell", max_examples=5)
     assert isinstance(results, list)
+    assert len(results) == 0
 
 
 def test_doj_loader_normalizes_fields(monkeypatch):
-    from src.data.sourcing.doj_loader import load_courtlistener_batch
+    from src.data.sourcing import doj_loader
 
     class _MockResponse:
         def raise_for_status(self): pass
@@ -88,12 +141,16 @@ def test_doj_loader_normalizes_fields(monkeypatch):
         "src.data.sourcing.doj_loader._httpx_get",
         lambda url, **kw: _MockResponse(),
     )
-    results = load_courtlistener_batch(case_name="Maxwell", max_examples=5)
+    results = doj_loader.load_courtlistener_batch(case_name="Maxwell", max_examples=5)
     assert len(results) == 1
     assert "text" in results[0]
+    assert results[0]["text"] == "Court document text here."
     assert "source" in results[0]
     assert results[0]["metadata"]["jurisdiction"] == "SDNY"
+    assert results[0]["metadata"]["date_filed"] == "2021-11-01"
 
+
+# --- Task 3c: International Loader ---
 
 def test_international_loader_import():
     from src.data.sourcing.international_loader import load_occrp_batch
@@ -101,7 +158,7 @@ def test_international_loader_import():
 
 
 def test_international_loader_returns_list(monkeypatch):
-    from src.data.sourcing.international_loader import load_occrp_batch
+    from src.data.sourcing import international_loader
 
     monkeypatch.setattr(
         "src.data.sourcing.international_loader._httpx_get",
@@ -110,5 +167,10 @@ def test_international_loader_returns_list(monkeypatch):
             "text": "<html><article>Investigation text here</article></html>",
         })(),
     )
-    results = load_occrp_batch(max_examples=5)
+    results = international_loader.load_occrp_batch(max_examples=5)
     assert isinstance(results, list)
+
+
+def test_github_foia_loader_import():
+    from src.data.sourcing.international_loader import load_github_public_foia
+    assert callable(load_github_public_foia)
