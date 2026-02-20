@@ -351,3 +351,34 @@ class TestDivergencePenalty:
         extreme = {"c": 1.0, "kappa": 1.0, "j": 1.0, "p": 0.0,
                    "eps": 0.0, "lam_L": 0.0, "lam_P": 0.0, "xi": 0.0}
         assert divergence_penalty(extreme) < 1.0
+
+
+class TestPhiGradientEquity:
+    """Equity-weighted gradient tests (post-revision)."""
+
+    def test_verification_criterion_1(self):
+        """Design doc criterion 1: c=0.1, others=0.5 -> c's gradient >5x any other."""
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        metrics["c"] = 0.1
+        g_care = phi_gradient_wrt("c", metrics)
+        g_others = [phi_gradient_wrt(c, metrics) for c in ["kappa", "j", "p", "eps", "lam_P", "xi"]]
+        for g_other in g_others:
+            assert g_care > 5 * g_other, f"care gradient {g_care} not >5x {g_other}"
+
+    def test_community_degrades_gradient(self):
+        """Low lam_L reduces all gradients via solidarity multiplier."""
+        metrics_high = {c: 0.3 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        metrics_high["lam_L"] = 0.8
+        metrics_low = dict(metrics_high)
+        metrics_low["lam_L"] = 0.1
+
+        g_high = phi_gradient_wrt("c", metrics_high)
+        g_low = phi_gradient_wrt("c", metrics_low)
+        assert g_high > g_low
+
+    def test_symmetric_case_similar_ordering(self):
+        """Verification criterion 9: symmetric case produces similar ordering."""
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        gradients = {c: phi_gradient_wrt(c, metrics) for c in ["c", "kappa", "j", "p", "eps", "lam_P", "xi"]}
+        values = list(gradients.values())
+        assert max(values) / min(values) < 1.1

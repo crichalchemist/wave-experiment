@@ -286,11 +286,16 @@ def phi_gradient_wrt(construct: str, metrics: Dict[str, float]) -> float:
     """
     Compute dPhi/dx for construct x, given current metric levels.
 
-    Simplified gradient approximation using Nash SWF structure from humanity.md.
-    For construct with current value x_i and Nash weight theta_i:
-        dPhi/dx ~ (theta / x) at current level
+    Equity-weighted, community-mediated gradient:
+        dPhi/dx ~ solidarity * w_i / x
 
-    Low values -> high gradients -> high priority (Rawlsian maximin intuition).
+    Where:
+        - solidarity = lam_L^0.5 (community multiplier)
+        - w_i = (1/x_i) / sum(1/x_j) (equity-adjusted weight)
+        - x = clamped construct value
+
+    Low values -> high weights -> high gradients -> high priority.
+    Low community -> low solidarity -> all gradients reduced.
 
     Args:
         construct: Symbol from humanity.md ("c", "kappa", "j", "p", "eps",
@@ -299,21 +304,13 @@ def phi_gradient_wrt(construct: str, metrics: Dict[str, float]) -> float:
 
     Returns:
         Gradient value (unbounded, but typically in [0.1, 100] range)
-
-    Examples:
-        >>> phi_gradient_wrt("c", {"c": 0.1})  # care is very scarce
-        1.25  # high gradient -> high priority
-        >>> phi_gradient_wrt("c", {"c": 0.9})  # care is abundant
-        0.14  # low gradient -> low priority
     """
-    x = metrics.get(construct, 0.5)  # default to mid-level if unknown
-    theta = 1.0 / 8.0  # equal Nash weights across 8 constructs
+    x = max(0.01, min(1.0, metrics.get(construct, 0.5)))
+    weights = equity_weights(metrics)
+    w_i = weights.get(construct, 1.0 / 8.0)
+    solidarity = community_multiplier(metrics.get("lam_L", 0.5))
 
-    # Floor to prevent division by zero and extreme gradients
-    # Using 0.01 floor -> max gradient = theta/0.01 = 12.5 for single construct
-    x_clamped = max(0.01, min(1.0, x))
-
-    return theta / x_clamped
+    return solidarity * w_i / x
 
 
 def score_hypothesis_welfare(

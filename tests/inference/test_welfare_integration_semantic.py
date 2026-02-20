@@ -35,11 +35,16 @@ class TestSemanticWelfareIntegration:
         assert "lam_L" in constructs
 
     def test_phi_gradient_uses_8_constructs(self):
-        """phi_gradient_wrt uses 1/8 weight (not old 1/7)."""
+        """phi_gradient_wrt uses equity weights across 8 constructs.
+
+        With c=1.0 and others defaulting to 0.5, c is the *least* deprived
+        construct so it gets a small equity weight.  Gradient should still be
+        positive and below the old equal-weight value of 1/8.
+        """
         from src.inference.welfare_scoring import phi_gradient_wrt
         gradient = phi_gradient_wrt("c", {"c": 1.0})
-        expected = 1.0 / 8.0  # theta = 1/8
-        assert abs(gradient - expected) < 0.01
+        assert gradient > 0.0  # always positive
+        assert gradient < 1.0 / 8.0  # less than old equal-weight (c is abundant)
 
     def test_get_construct_scores_returns_8_keys(self):
         """get_construct_scores returns all 8 construct keys."""

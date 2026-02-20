@@ -83,8 +83,9 @@ def test_score_gaps_welfare_sorts_by_urgency(_mock):
     # Should be sorted by welfare urgency
     assert scored[0].welfare_impact >= scored[1].welfare_impact >= scored[2].welfare_impact
 
-    # Violence/protection gap should be first (most urgent)
-    assert "violence" in scored[0].description.lower()
+    # With equity weighting, the most deprived construct (c=0.1) gets highest
+    # priority weight, so resource deprivation outranks violence (lam_P=0.2).
+    assert "resource" in scored[0].description.lower()
 
 
 @_force_keyword
