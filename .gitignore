@@ -35,6 +35,10 @@ env/
 
 # Data (large files)
 data/
+# Exception: welfare training data (small, expensive to regenerate)
+!data/
+!data/training/
+!data/training/welfare_training_*.jsonl
 *.db
 *.sqlite
 
@@ -70,4 +74,4 @@ package-lock.json
 circleback.txt
 pdf_insights.md
 construction research/
-smiles and cries/
+src/data/smiles and cries/
