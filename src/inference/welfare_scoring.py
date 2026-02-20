@@ -204,6 +204,40 @@ def divergence_penalty(metrics: Dict[str, float]) -> float:
     return MU * sq_sum / len(CONSTRUCT_PAIRS)
 
 
+def compute_phi(metrics: Dict[str, float]) -> float:
+    """
+    Compute Phi(humanity) — the full welfare function.
+
+    Phi = f(lam_L) * product(x_tilde_i^w_i) * Psi_ubuntu * (1 - Psi_penalty)
+
+    Components:
+        - f(lam_L): Community solidarity multiplier (Ubuntu substrate)
+        - product(x_tilde_i^w_i): Equity-weighted geometric mean (Western capability)
+        - Psi_ubuntu: Paired construct synergy (relational welfare)
+        - Psi_penalty: Divergence penalty (structural distortion detection)
+    """
+    lam_L = max(0.01, metrics.get("lam_L", 0.5))
+
+    # Community multiplier
+    f_lam = community_multiplier(lam_L)
+
+    # Equity weights
+    weights = equity_weights(metrics)
+
+    # Weighted geometric mean of construct values
+    product = 1.0
+    for c in ALL_CONSTRUCTS:
+        x = max(0.01, metrics.get(c, 0.5))
+        product *= x ** weights[c]
+
+    # Synergy and penalty
+    synergy = ubuntu_synergy(metrics)
+    penalty = divergence_penalty(metrics)
+
+    phi = f_lam * product * synergy * (1.0 - penalty)
+    return max(0.0, phi)
+
+
 def _keyword_fallback(text: str) -> Tuple[str, ...]:
     """
     Infer threatened constructs via keyword matching (fallback method).

@@ -382,3 +382,54 @@ class TestPhiGradientEquity:
         gradients = {c: phi_gradient_wrt(c, metrics) for c in ["c", "kappa", "j", "p", "eps", "lam_P", "xi"]}
         values = list(gradients.values())
         assert max(values) / min(values) < 1.1
+
+
+class TestComputePhi:
+    """Full Phi(humanity) computation."""
+
+    def test_all_equal_mid(self):
+        """All constructs at 0.5 -> moderate Phi."""
+        from src.inference.welfare_scoring import compute_phi
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        phi = compute_phi(metrics)
+        assert 0.3 < phi < 0.8
+
+    def test_all_ones(self):
+        """All constructs at 1.0 -> Phi near 1.0."""
+        from src.inference.welfare_scoring import compute_phi
+        metrics = {c: 1.0 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        phi = compute_phi(metrics)
+        assert phi > 0.9
+
+    def test_community_collapse_degrades_phi(self):
+        """Low lam_L degrades entire Phi (verification criterion 2)."""
+        from src.inference.welfare_scoring import compute_phi
+        base = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        high_community = dict(base)
+        high_community["lam_L"] = 0.8
+        low_community = dict(base)
+        low_community["lam_L"] = 0.1
+        phi_high = compute_phi(high_community)
+        phi_low = compute_phi(low_community)
+        assert phi_low < 0.5 * phi_high
+
+    def test_paternalism_detection(self):
+        """Verification criterion 8: c high, lam_P high, lam_L low -> penalty fires."""
+        from src.inference.welfare_scoring import compute_phi
+        paternalistic = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        paternalistic["c"] = 0.9
+        paternalistic["lam_P"] = 0.9
+        paternalistic["lam_L"] = 0.1
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert compute_phi(balanced) > compute_phi(paternalistic)
+
+    def test_phi_non_negative(self):
+        """Phi stays non-negative for any valid inputs."""
+        from src.inference.welfare_scoring import compute_phi
+        import random
+        random.seed(42)
+        for _ in range(20):
+            metrics = {c: random.uniform(0.01, 1.0)
+                       for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+            phi = compute_phi(metrics)
+            assert phi >= 0.0
