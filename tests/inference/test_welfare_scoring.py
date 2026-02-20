@@ -178,3 +178,43 @@ class TestComputeGapUrgency:
 
         urgency = compute_gap_urgency(gap, {"c": 0.2})
         assert urgency >= 0.5  # inferred "c" from "resource" (1/8 / 0.2 * 0.8 = 0.5)
+
+
+class TestRecoveryAwareInput:
+    """Recovery-aware floor function: x_tilde_i."""
+
+    def test_above_floor_returns_raw(self):
+        """Construct above its floor passes through unchanged."""
+        from src.inference.welfare_scoring import recovery_aware_input
+        assert recovery_aware_input(x_i=0.5, floor_i=0.20, dx_dt_i=0.0, lam_L=0.5) == 0.5
+
+    def test_healing_high_trajectory_high_community(self):
+        """Below floor + positive dx/dt + high lam_L -> near floor."""
+        from src.inference.welfare_scoring import recovery_aware_input
+        result = recovery_aware_input(x_i=0.05, floor_i=0.20, dx_dt_i=0.5, lam_L=0.8)
+        assert result > 0.15  # recovery potential lifts toward floor
+
+    def test_intervention_pending_stagnant_with_community(self):
+        """Below floor + dx/dt~0 + high lam_L -> moderate recovery potential."""
+        from src.inference.welfare_scoring import recovery_aware_input
+        result = recovery_aware_input(x_i=0.05, floor_i=0.20, dx_dt_i=0.0, lam_L=0.8)
+        assert result > 0.05  # community compensates even when stagnant
+        assert result < 0.20  # but doesn't reach floor without trajectory
+
+    def test_true_collapse_stagnant_no_community(self):
+        """Below floor + dx/dt~0 + low lam_L -> near raw value (true collapse)."""
+        from src.inference.welfare_scoring import recovery_aware_input
+        result = recovery_aware_input(x_i=0.05, floor_i=0.20, dx_dt_i=0.0, lam_L=0.05)
+        assert result < 0.08  # barely above raw — white supremacy signature
+
+    def test_floor_values_match_design(self):
+        """Hard floors per construct match the design doc."""
+        from src.inference.welfare_scoring import CONSTRUCT_FLOORS
+        assert CONSTRUCT_FLOORS["c"] == 0.20
+        assert CONSTRUCT_FLOORS["kappa"] == 0.20
+        assert CONSTRUCT_FLOORS["lam_P"] == 0.20
+        assert CONSTRUCT_FLOORS["lam_L"] == 0.15
+        assert CONSTRUCT_FLOORS["xi"] == 0.30
+        assert CONSTRUCT_FLOORS["j"] == 0.10
+        assert CONSTRUCT_FLOORS["p"] == 0.10
+        assert CONSTRUCT_FLOORS["eps"] == 0.10

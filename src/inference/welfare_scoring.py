@@ -9,6 +9,7 @@ fallback when the model is not yet trained.
 """
 from typing import Dict, Tuple
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,60 @@ _CONSTRUCT_PATTERNS = {
     "lam_P": _PROTECTION_PATTERNS,
     "xi": _TRUTH_PATTERNS,
 }
+
+# ---------------------------------------------------------------------------
+# Hard floors per construct (design doc §2)
+# ---------------------------------------------------------------------------
+CONSTRUCT_FLOORS: Dict[str, float] = {
+    "c": 0.20,       # Basic needs non-negotiable
+    "kappa": 0.20,    # Crisis response minimum
+    "lam_P": 0.20,    # Safety non-negotiable
+    "lam_L": 0.15,    # Community minimum
+    "xi": 0.30,       # Epistemic integrity highest floor
+    "j": 0.10,        # Lower but present
+    "p": 0.10,
+    "eps": 0.10,
+}
+
+
+def _sigmoid(x: float) -> float:
+    """Numerically stable sigmoid."""
+    if x >= 0:
+        return 1.0 / (1.0 + math.exp(-x))
+    ex = math.exp(x)
+    return ex / (1.0 + ex)
+
+
+def recovery_aware_input(
+    x_i: float,
+    floor_i: float,
+    dx_dt_i: float,
+    lam_L: float,
+) -> float:
+    """
+    Recovery-aware effective input for a construct.
+
+    When a construct is above its floor, pass through unchanged.
+    When below floor, compute recovery potential from:
+      - trajectory: sigmoid(10 * dx_dt) — own recovery trend
+      - community_capacity: lam_L^0.5 — community can catalyze recovery
+      - recovery_potential: max(trajectory, community_capacity * 0.5)
+
+    Key insight: community can partially compensate for stagnant trajectory.
+    Care doesn't begin the uptick without community intervention.
+    """
+    if x_i >= floor_i:
+        return x_i
+
+    # Bias of -3.0 shifts sigmoid so dx_dt=0 maps to ~0.047 (not 0.5).
+    # Without this, sigmoid(0)=0.5 would dominate community_capacity*0.5
+    # for all lam_L < 1.0, preventing community from compensating for
+    # stagnant trajectory (contradicting the design intent).
+    trajectory = _sigmoid(10.0 * dx_dt_i - 3.0)
+    community_capacity = max(0.01, lam_L) ** 0.5  # guard against lam_L=0
+    recovery_potential = max(trajectory, community_capacity * 0.5)
+
+    return x_i + (floor_i - x_i) * recovery_potential
 
 
 def _keyword_fallback(text: str) -> Tuple[str, ...]:

@@ -48,7 +48,9 @@ def recovery_aware_input(x_i, floor_i, dx_dt_i, lam_L):
     if x_i >= floor_i:
         return x_i
 
-    trajectory = sigmoid(10 * dx_dt_i)           # own recovery trend
+    # Bias of -3.0: dx_dt=0 maps to ~0.047, not 0.5
+    # Without this, sigmoid(0)=0.5 dominates community_capacity*0.5
+    trajectory = sigmoid(10 * dx_dt_i - 3)       # own recovery trend
     community_capacity = lam_L ** 0.5             # community can catalyze recovery
 
     # Community partially compensates for stagnant trajectory
