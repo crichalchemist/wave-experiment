@@ -256,3 +256,36 @@ class TestEquityWeights:
         weights = equity_weights(metrics)
         # 1/0.1 = 10, 7*(1/0.5) = 14, total=24, c weight = 10/24 ~ 0.417
         assert weights["c"] > 0.4
+
+
+class TestCommunityMultiplier:
+    """Community solidarity multiplier: f(lam_L) = lam_L^0.5."""
+
+    def test_full_community(self):
+        from src.inference.welfare_scoring import community_multiplier
+        assert abs(community_multiplier(1.0) - 1.0) < 0.001
+
+    def test_half_community(self):
+        """lam_L=0.5 -> f=0.707 (29% diminished)."""
+        from src.inference.welfare_scoring import community_multiplier
+        result = community_multiplier(0.5)
+        assert abs(result - 0.707) < 0.01
+
+    def test_quarter_community(self):
+        """lam_L=0.25 -> f=0.5 (50% degradation)."""
+        from src.inference.welfare_scoring import community_multiplier
+        result = community_multiplier(0.25)
+        assert abs(result - 0.5) < 0.01
+
+    def test_near_collapse(self):
+        """lam_L=0.04 -> f=0.2 (80% degradation)."""
+        from src.inference.welfare_scoring import community_multiplier
+        result = community_multiplier(0.04)
+        assert abs(result - 0.2) < 0.01
+
+    def test_verification_criterion_2(self):
+        """Design doc criterion 2: Phi at lam_L=0.1 < 50% of Phi at lam_L=0.8."""
+        from src.inference.welfare_scoring import community_multiplier
+        low = community_multiplier(0.1)
+        high = community_multiplier(0.8)
+        assert low < 0.5 * high

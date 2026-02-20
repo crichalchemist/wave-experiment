@@ -150,6 +150,20 @@ def equity_weights(metrics: Dict[str, float]) -> Dict[str, float]:
     return {c: inv[c] / inv_sum for c in ALL_CONSTRUCTS}
 
 
+GAMMA = 0.5  # Community solidarity exponent
+
+
+def community_multiplier(lam_L: float) -> float:
+    """
+    Community solidarity multiplier.
+
+    f(lam_L) = lam_L^gamma where gamma=0.5.
+    When community solidarity is low, all welfare degrades.
+    Ubuntu: welfare emerges from relational context.
+    """
+    return max(0.01, lam_L) ** GAMMA
+
+
 def _keyword_fallback(text: str) -> Tuple[str, ...]:
     """
     Infer threatened constructs via keyword matching (fallback method).
