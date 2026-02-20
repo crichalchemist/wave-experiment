@@ -1,6 +1,12 @@
 """Tests for constitution-first training pipeline."""
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from pathlib import Path
+
+# Force keyword fallback — semantic classifier tested separately
+_force_keyword = patch(
+    'src.inference.welfare_classifier.get_construct_scores',
+    side_effect=FileNotFoundError("mocked out"),
+)
 
 
 def test_import():
@@ -90,7 +96,8 @@ def test_warmup_skips_empty_text(tmp_path, monkeypatch):
 
 
 class TestWelfareFiltering:
-    def test_includes_welfare_relevant_examples(self):
+    @_force_keyword
+    def test_includes_welfare_relevant_examples(self, _mock):
         """should_include_example returns True for welfare-relevant text."""
         from src.training.constitutional_warmup import should_include_example
 
@@ -99,7 +106,8 @@ class TestWelfareFiltering:
 
         assert should_include_example(text, phi_metrics, welfare_threshold=0.3) is True
 
-    def test_excludes_welfare_irrelevant_examples(self):
+    @_force_keyword
+    def test_excludes_welfare_irrelevant_examples(self, _mock):
         """should_include_example returns False for welfare-irrelevant text."""
         from src.training.constitutional_warmup import should_include_example
 
@@ -108,7 +116,8 @@ class TestWelfareFiltering:
 
         assert should_include_example(text, phi_metrics, welfare_threshold=0.3) is False
 
-    def test_always_includes_high_urgency_examples(self):
+    @_force_keyword
+    def test_always_includes_high_urgency_examples(self, _mock):
         """should_include_example returns True for high-urgency welfare threats."""
         from src.training.constitutional_warmup import should_include_example
 
@@ -119,7 +128,8 @@ class TestWelfareFiltering:
         # Even with high threshold, scarce constructs boost relevance
         assert should_include_example(text, phi_metrics, welfare_threshold=0.3) is True
 
-    def test_threshold_controls_inclusion(self):
+    @_force_keyword
+    def test_threshold_controls_inclusion(self, _mock):
         """welfare_threshold parameter controls inclusion cutoff."""
         from src.training.constitutional_warmup import should_include_example
 

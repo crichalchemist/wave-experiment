@@ -1,10 +1,17 @@
 """Tests for welfare-aware gap prioritization in analysis pipeline."""
 import pytest
+from unittest.mock import patch
 from src.inference.pipeline import analyze, score_gaps_welfare
 from src.core.providers import MockProvider
 from src.data.graph_store import InMemoryGraph
 from src.detective.experience import EMPTY_LIBRARY
 from src.core.types import Gap, GapType
+
+# Force keyword fallback — semantic classifier tested in test_welfare_integration_semantic.py
+_force_keyword = patch(
+    'src.inference.welfare_classifier.get_construct_scores',
+    side_effect=FileNotFoundError("mocked out"),
+)
 
 
 def test_analyze_returns_gaps_with_welfare_impact():
@@ -20,7 +27,8 @@ def test_gaps_sorted_by_welfare_urgency():
     pytest.skip("Gap detection not yet integrated into analyze() pipeline")
 
 
-def test_score_gaps_welfare_populates_welfare_impact():
+@_force_keyword
+def test_score_gaps_welfare_populates_welfare_impact(_mock):
     """score_gaps_welfare() computes and populates welfare_impact."""
     gaps = [
         Gap(
@@ -45,7 +53,8 @@ def test_score_gaps_welfare_populates_welfare_impact():
     assert scored[0].description == "Resource allocation gap 2013-2017"
 
 
-def test_score_gaps_welfare_sorts_by_urgency():
+@_force_keyword
+def test_score_gaps_welfare_sorts_by_urgency(_mock):
     """score_gaps_welfare() sorts gaps by welfare urgency (descending)."""
     gaps = [
         Gap(
@@ -78,7 +87,8 @@ def test_score_gaps_welfare_sorts_by_urgency():
     assert "violence" in scored[0].description.lower()
 
 
-def test_score_gaps_welfare_infers_constructs():
+@_force_keyword
+def test_score_gaps_welfare_infers_constructs(_mock):
     """score_gaps_welfare() infers threatened_constructs if not set."""
     gap = Gap(
         type=GapType.TEMPORAL,

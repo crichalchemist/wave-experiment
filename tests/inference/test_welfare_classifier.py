@@ -56,22 +56,29 @@ class TestWelfareClassifier:
 
     def test_fallback_returns_zero_scores_when_model_missing(self):
         """When the model file doesn't exist, returns all-zero scores."""
+        from pathlib import Path
         from src.inference.welfare_classifier import get_construct_scores, _load_welfare_classifier
 
-        # Clear any cached classifier
         _load_welfare_classifier.cache_clear()
 
-        scores = get_construct_scores("Any text at all")
-        assert all(score == 0.0 for score in scores.values())
+        with patch('src.inference.welfare_classifier.MODEL_PATH', Path('/tmp/nonexistent_model')):
+            scores = get_construct_scores("Any text at all")
+            assert all(score == 0.0 for score in scores.values())
+
+        _load_welfare_classifier.cache_clear()
 
     def test_fallback_infer_returns_empty_tuple(self):
         """When the model is missing, infer_threatened_constructs returns ()."""
+        from pathlib import Path
         from src.inference.welfare_classifier import infer_threatened_constructs, _load_welfare_classifier
 
         _load_welfare_classifier.cache_clear()
 
-        constructs = infer_threatened_constructs("Violence and harm")
-        assert constructs == ()
+        with patch('src.inference.welfare_classifier.MODEL_PATH', Path('/tmp/nonexistent_model')):
+            constructs = infer_threatened_constructs("Violence and harm")
+            assert constructs == ()
+
+        _load_welfare_classifier.cache_clear()
 
     def test_construct_names_list(self):
         """CONSTRUCT_NAMES contains exactly the 8 expected constructs."""

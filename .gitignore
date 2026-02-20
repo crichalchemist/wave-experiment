@@ -45,6 +45,7 @@ data/
 # Model checkpoints
 checkpoints/*.pt
 checkpoints/*.pth
+models/
 
 # Jupyter
 .ipynb_checkpoints/

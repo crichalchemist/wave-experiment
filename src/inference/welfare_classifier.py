@@ -27,7 +27,8 @@ def _load_welfare_classifier():
 
     Raises FileNotFoundError if model directory does not exist.
     """
-    if not MODEL_PATH.exists():
+    config_file = MODEL_PATH / "config.json"
+    if not config_file.exists():
         raise FileNotFoundError(
             f"Welfare classifier not found at {MODEL_PATH}. "
             f"Run scripts/train_welfare_classifier.py first."
@@ -61,9 +62,10 @@ def get_construct_scores(text: str) -> Dict[str, float]:
     """
     try:
         classifier = _load_welfare_classifier()
-    except FileNotFoundError:
+    except (FileNotFoundError, ValueError, OSError):
+        _load_welfare_classifier.cache_clear()
         logger.warning(
-            "Welfare classifier model not found; returning zero scores. "
+            "Welfare classifier model not found or invalid; returning zero scores. "
             "Train the model with scripts/train_welfare_classifier.py."
         )
         return {construct: 0.0 for construct in CONSTRUCT_NAMES}
