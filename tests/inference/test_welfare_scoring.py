@@ -485,3 +485,26 @@ class TestDisablingFunctions:
         g_care = phi_gradient_wrt("c", targeted)
         g_kappa = phi_gradient_wrt("kappa", targeted)
         assert g_care > 3 * g_kappa
+
+
+class TestDesignVerificationCriteria:
+    """Explicit tests for verification criteria 9 and 10 from the design doc."""
+
+    def test_criterion_9_symmetric_case(self):
+        """Symmetric case (all constructs equal) produces moderate, stable Phi."""
+        from src.inference.welfare_scoring import compute_phi
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        phi = compute_phi(metrics)
+        assert 0.2 < phi < 0.9
+
+    def test_criterion_10_api_contracts_unchanged(self):
+        """API contracts preserved — function signatures haven't changed."""
+        import inspect
+        sig_gradient = inspect.signature(phi_gradient_wrt)
+        assert list(sig_gradient.parameters.keys()) == ["construct", "metrics"]
+
+        sig_welfare = inspect.signature(score_hypothesis_welfare)
+        assert list(sig_welfare.parameters.keys()) == ["hypothesis", "phi_metrics"]
+
+        sig_urgency = inspect.signature(compute_gap_urgency)
+        assert list(sig_urgency.parameters.keys()) == ["gap", "phi_metrics"]
