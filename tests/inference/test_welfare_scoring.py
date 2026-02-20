@@ -433,3 +433,55 @@ class TestComputePhi:
                        for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
             phi = compute_phi(metrics)
             assert phi >= 0.0
+
+
+class TestDisablingFunctions:
+    """Diagnostic detection of structural oppression patterns."""
+
+    def test_white_supremacy_signature(self):
+        """Verification criterion 7: lam_L suppressed + xi low + lam_P low -> massive welfare divergence."""
+        from src.inference.welfare_scoring import compute_phi
+        # White supremacy signature for targeted population
+        ws_metrics = {
+            "c": 0.1,       # racialized resource allocation
+            "kappa": 0.3,
+            "j": 0.2,       # psychological tax
+            "p": 0.2,       # autonomy constrained
+            "eps": 0.1,     # segregation prevents perspective-taking
+            "lam_L": 0.05,  # community systematically dismantled
+            "lam_P": 0.05,  # state becomes threat
+            "xi": 0.05,     # truth replaced, not merely reduced
+        }
+        # Dominant group
+        dom_metrics = {c: 0.7 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+
+        phi_targeted = compute_phi(ws_metrics)
+        phi_dominant = compute_phi(dom_metrics)
+
+        # Massive welfare divergence
+        assert phi_dominant / max(0.001, phi_targeted) > 5.0
+
+    def test_paternalism_signature(self):
+        """High care + high protection + low love -> Phi reduced by penalty."""
+        from src.inference.welfare_scoring import compute_phi
+        paternalistic = {
+            "c": 0.8, "kappa": 0.5, "j": 0.5, "p": 0.3,
+            "eps": 0.3, "lam_L": 0.1, "lam_P": 0.8, "xi": 0.5,
+        }
+        relational = {
+            "c": 0.6, "kappa": 0.5, "j": 0.5, "p": 0.5,
+            "eps": 0.5, "lam_L": 0.6, "lam_P": 0.5, "xi": 0.5,
+        }
+        # Relational scores higher despite lower individual construct values
+        assert compute_phi(relational) > compute_phi(paternalistic)
+
+    def test_manufactured_scarcity(self):
+        """High aggregate resources but depressed care -> care gradient dominates."""
+        targeted = {
+            "c": 0.1, "kappa": 0.4, "j": 0.3, "p": 0.3,
+            "eps": 0.3, "lam_L": 0.3, "lam_P": 0.3, "xi": 0.4,
+        }
+        # Equity weights should make care dominate the gradient
+        g_care = phi_gradient_wrt("c", targeted)
+        g_kappa = phi_gradient_wrt("kappa", targeted)
+        assert g_care > 3 * g_kappa
