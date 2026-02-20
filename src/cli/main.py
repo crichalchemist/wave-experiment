@@ -91,25 +91,23 @@ def critique(analysis_text: str, constitution: str) -> None:
 @click.option("--output", default="data/training/constitutional_pairs.jsonl", help="Output JSONL path")
 @click.option("--max-examples", default=200, help="Maximum preference pairs to generate")
 @click.option("--constitution", default="docs/constitution.md", help="Constitution path")
-def warmup(output: str, max_examples: int, constitution: str) -> None:
+@click.option("--document-file", default=None, help="Text file with pre-extracted documents (one per line/chunk)")
+@click.option("--local-only", is_flag=True, help="Skip remote sources (HF, DOJ, international)")
+def warmup(output: str, max_examples: int, constitution: str, document_file: str | None, local_only: bool) -> None:
     """Generate constitutional preference pairs (run before SFT)."""
     from src.training.constitutional_warmup import run_constitutional_warmup, ConstitutionalWarmupConfig
-    from src.core.providers import AzureFoundryProvider
-    import os
+    from src.core.providers import critic_provider_from_env
 
     local = provider_from_env()
-    critic_endpoint = os.environ.get("AZURE_ENDPOINT")
-    critic_key = os.environ.get("AZURE_API_KEY")
-    critic_model = os.environ.get("AZURE_MODEL", "claude-3-5-sonnet")
-
-    if not critic_endpoint:
-        raise click.ClickException("Set AZURE_ENDPOINT for the constitutional critic (Claude).")
-
-    critic = AzureFoundryProvider(endpoint=critic_endpoint, api_key=critic_key, model=critic_model)
+    critic = critic_provider_from_env()
     cfg = ConstitutionalWarmupConfig(
         output_path=output,
         max_examples=max_examples,
         constitution_path=constitution,
+        document_file=document_file,
+        use_huggingface=not local_only,
+        use_doj=not local_only,
+        use_international=not local_only,
     )
     count = run_constitutional_warmup(cfg, local_provider=local, critic_provider=critic)
     click.echo(f"Generated {count} constitutional preference pairs → {output}")

@@ -109,21 +109,48 @@ def _load_all_sources(cfg: ConstitutionalWarmupConfig) -> list[dict[str, Any]]:
     examples: list[dict[str, Any]] = []
     per_source = max(1, cfg.max_examples // 3)
 
-    # NEW: Load from simple document file if provided
+    # Load from pre-extracted document file if provided.
+    # Supports two formats:
+    #   1. Chunk-separated: blocks divided by lines of "====..." (from extract_pdf_documents.py)
+    #   2. One-per-line: each non-empty line is a document
     if cfg.document_file:
         try:
-            with open(cfg.document_file, 'r', encoding='utf-8') as f:
-                for i, line in enumerate(f):
-                    if i >= cfg.max_examples:
+            raw = Path(cfg.document_file).read_text(encoding="utf-8")
+            # Detect chunk-separated format (extract_pdf_documents.py output)
+            if "=" * 20 in raw:
+                chunks = raw.split("=" * 20)
+                for i, chunk in enumerate(chunks):
+                    if len(examples) >= cfg.max_examples:
+                        break
+                    text = chunk.strip()
+                    # Skip empty chunks and metadata-only lines
+                    if not text or (text.startswith("#") and "\n" not in text):
+                        continue
+                    # Extract source from metadata comment if present
+                    source = cfg.document_file
+                    lines = text.split("\n", 1)
+                    if lines[0].startswith("# Source:"):
+                        source = lines[0].replace("# Source:", "").strip()
+                        text = lines[1].strip() if len(lines) > 1 else ""
+                    if text and len(text) > 100:  # skip too-short fragments
+                        examples.append({
+                            "text": text,
+                            "source": source,
+                            "metadata": {"chunk": i}
+                        })
+            else:
+                # One-per-line format
+                for i, line in enumerate(raw.splitlines()):
+                    if len(examples) >= cfg.max_examples:
                         break
                     text = line.strip()
-                    if text:
+                    if text and not text.startswith("#"):
                         examples.append({
                             "text": text,
                             "source": cfg.document_file,
                             "metadata": {"line": i + 1}
                         })
-        except Exception as e:
+        except Exception:
             pass  # File not found or read error - continue with other sources
 
     if cfg.use_huggingface:
