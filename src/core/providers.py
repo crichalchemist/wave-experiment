@@ -60,7 +60,11 @@ class VLLMProvider:
     def __post_init__(self) -> None:
         if _OpenAI is None:
             raise ImportError("openai package required for VLLMProvider")
-        object.__setattr__(self, "_client", _OpenAI(base_url=self.base_url, api_key=_VLLM_DUMMY_API_KEY))
+        object.__setattr__(self, "_client", _OpenAI(
+            base_url=self.base_url,
+            api_key=_VLLM_DUMMY_API_KEY,
+            timeout=600.0,  # 10 min — CPU inference on large chunks is slow
+        ))
 
     def complete(self, prompt: str, **kwargs) -> str:
         response = self._client.chat.completions.create(

@@ -211,9 +211,27 @@ def run_constitutional_warmup(
     output_path = Path(cfg.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Count existing pairs if resuming (append mode)
+    existing_count = 0
+    if output_path.exists():
+        existing_count = sum(1 for _ in output_path.open(encoding="utf-8"))
+
     count = 0
     filtered_count = 0
-    with output_path.open("w", encoding="utf-8") as f:
+    skipped_for_resume = 0
+    error_count = 0
+    target = cfg.max_examples - existing_count
+
+    import sys
+
+    if existing_count > 0:
+        print(f"Resuming: {existing_count} pairs already exist, generating up to {target} more", file=sys.stderr)
+
+    if target <= 0:
+        print(f"Already have {existing_count} pairs (target: {cfg.max_examples})", file=sys.stderr)
+        return existing_count
+
+    with output_path.open("a", encoding="utf-8") as f:
         for example in examples:
             text = example.get("text", "").strip()
             if not text:
@@ -224,32 +242,45 @@ def run_constitutional_warmup(
                 filtered_count += 1
                 continue
 
-            instruction = _ANALYSIS_PROMPT.format(text=text[:2000])  # context window budget
-            original_analysis = local_provider.complete(instruction)
+            try:
+                instruction = _ANALYSIS_PROMPT.format(text=text[:2000])  # context window budget
+                original_analysis = local_provider.complete(instruction)
 
-            pair = generate_preference_pair(
-                instruction=instruction,
-                original_analysis=original_analysis,
-                constitution=constitution,
-                generator_provider=local_provider,
-                critic_provider=critic_provider,
-            )
+                pair = generate_preference_pair(
+                    instruction=instruction,
+                    original_analysis=original_analysis,
+                    constitution=constitution,
+                    generator_provider=local_provider,
+                    critic_provider=critic_provider,
+                )
 
-            f.write(json.dumps({
-                "instruction": pair.instruction,
-                "rejected": pair.rejected,
-                "chosen": pair.chosen,
-                "source": example.get("source", "unknown"),
-                "metadata": example.get("metadata", {}),
-            }) + "\n")
-            count += 1
+                f.write(json.dumps({
+                    "instruction": pair.instruction,
+                    "rejected": pair.rejected,
+                    "chosen": pair.chosen,
+                    "source": example.get("source", "unknown"),
+                    "metadata": example.get("metadata", {}),
+                }) + "\n")
+                f.flush()  # write to disk immediately — crash-safe
+                count += 1
 
-            if count >= cfg.max_examples:
+                if count % 10 == 0:
+                    print(f"  Progress: {count}/{target} pairs ({count + existing_count} total)", file=sys.stderr)
+
+            except Exception as e:
+                error_count += 1
+                print(f"  Error on chunk {example.get('metadata', {})}: {e}", file=sys.stderr)
+                if error_count >= 5:
+                    print("  Too many errors, stopping", file=sys.stderr)
+                    break
+                continue  # skip this example and continue
+
+            if count >= target:
                 break
 
     # Report filtering statistics to stderr
-    import sys
     print(f"\nWelfare filtering: {filtered_count} examples excluded (below threshold)", file=sys.stderr)
-    print(f"Generated: {count} preference pairs", file=sys.stderr)
+    print(f"Generated: {count} new preference pairs ({error_count} errors)", file=sys.stderr)
+    print(f"Total pairs in file: {count + existing_count}", file=sys.stderr)
 
     return count
