@@ -6,13 +6,18 @@ import pytest
 
 def test_dpo_constants():
     from src.training.train_dpo import (
-        DPO_OUTPUT_DIR, DPO_BETA, DPO_LR, DPO_EPOCHS, DPO_BATCH_SIZE
+        DPO_OUTPUT_DIR, DPO_BETA, DPO_LR, DPO_EPOCHS, DPO_BATCH_SIZE,
+        DPO_GRAD_ACCUM, LORA_RANK, LORA_ALPHA, DEFAULT_MODEL_ID,
     )
     assert DPO_OUTPUT_DIR == "checkpoints/dpo"
     assert DPO_BETA == 0.1
     assert DPO_LR == 5e-7
     assert DPO_EPOCHS == 1
-    assert DPO_BATCH_SIZE == 4
+    assert DPO_BATCH_SIZE == 1       # batch_size=1 for CPU training
+    assert DPO_GRAD_ACCUM == 8       # effective batch = 8
+    assert LORA_RANK == 16
+    assert LORA_ALPHA == 32
+    assert "DeepSeek" in DEFAULT_MODEL_ID
 
 
 def test_load_preference_pairs_valid(tmp_path):
@@ -53,6 +58,29 @@ def test_preference_sample_is_immutable():
         s.instruction = "other"   # type: ignore
 
 
+def test_preference_pairs_to_dataset():
+    from src.training.train_dpo import PreferenceSample, preference_pairs_to_dataset
+    samples = [
+        PreferenceSample("prompt1", "bad1", "good1"),
+        PreferenceSample("prompt2", "bad2", "good2"),
+    ]
+    ds = preference_pairs_to_dataset(samples)
+    assert len(ds) == 2
+    assert set(ds.column_names) == {"prompt", "chosen", "rejected"}
+    assert ds[0]["prompt"] == "prompt1"
+    assert ds[0]["chosen"] == "good1"
+    assert ds[0]["rejected"] == "bad1"
+
+
+def test_build_lora_config():
+    from src.training.train_dpo import build_lora_config, LORA_RANK, LORA_ALPHA
+    config = build_lora_config()
+    assert config.r == LORA_RANK
+    assert config.lora_alpha == LORA_ALPHA
+    assert "q_proj" in config.target_modules
+    assert "v_proj" in config.target_modules
+
+
 def test_build_dpo_trainer_wires_config():
     """Verify DPOConfig receives the spec-mandated values."""
     captured: dict = {}
@@ -74,7 +102,9 @@ def test_build_dpo_trainer_wires_config():
     assert captured["beta"] == 0.1
     assert captured["learning_rate"] == 5e-7
     assert captured["num_train_epochs"] == 1
-    assert captured["per_device_train_batch_size"] == 4
+    assert captured["per_device_train_batch_size"] == 1
+    assert captured["gradient_accumulation_steps"] == 8
+    assert captured["precompute_ref_log_probs"] is True
     assert captured["report_to"] == "none"
     assert mock_trainer_cls.called
 

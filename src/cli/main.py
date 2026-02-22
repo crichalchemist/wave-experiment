@@ -111,3 +111,66 @@ def warmup(output: str, max_examples: int, constitution: str, document_file: str
     )
     count = run_constitutional_warmup(cfg, local_provider=local, critic_provider=critic)
     click.echo(f"Generated {count} constitutional preference pairs → {output}")
+
+
+@cli.command()
+@click.option("--data", default="data/training/constitutional_pairs.jsonl",
+              help="JSONL file with preference pairs")
+@click.option("--model-id", default=None,
+              help="HuggingFace model ID (default: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B)")
+@click.option("--output-dir", default="checkpoints/dpo", help="Directory for checkpoints")
+@click.option("--eval-split", default=0.1, type=float, help="Fraction of data for evaluation")
+def dpo(data: str, model_id: str | None, output_dir: str, eval_split: float) -> None:
+    """Run DPO training on constitutional preference pairs."""
+    from src.training.train_dpo import (
+        load_preference_pairs,
+        preference_pairs_to_dataset,
+        build_dpo_trainer,
+        DEFAULT_MODEL_ID,
+        DPO_OUTPUT_DIR,
+    )
+
+    model_id = model_id or DEFAULT_MODEL_ID
+
+    click.echo(f"Loading preference pairs from {data}")
+    samples = load_preference_pairs(data)
+    click.echo(f"Loaded {len(samples)} preference pairs")
+
+    dataset = preference_pairs_to_dataset(samples)
+
+    # Train/eval split
+    if eval_split > 0 and len(samples) > 10:
+        split = dataset.train_test_split(test_size=eval_split, seed=42)
+        train_ds, eval_ds = split["train"], split["test"]
+        click.echo(f"Split: {len(train_ds)} train, {len(eval_ds)} eval")
+    else:
+        train_ds, eval_ds = dataset, None
+
+    click.echo(f"Loading model: {model_id}")
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    import torch
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=True,
+    )
+
+    click.echo("Building DPO trainer with LoRA")
+    trainer = build_dpo_trainer(
+        model=model,
+        tokenizer=tokenizer,
+        train_dataset=train_ds,
+        eval_dataset=eval_ds,
+    )
+
+    click.echo("Starting DPO training...")
+    trainer.train()
+
+    save_path = output_dir or DPO_OUTPUT_DIR
+    trainer.save_model(save_path)
+    click.echo(f"Training complete. Model saved to {save_path}")
