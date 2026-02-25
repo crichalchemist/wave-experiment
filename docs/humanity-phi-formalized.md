@@ -240,6 +240,7 @@ This achieves the Rawlsian maximin intuition: improve the worst-off first.
 
 ```
 Ψ_ubuntu = 1 + η · [√(c · λ_L) + √(κ · λ_P) + √(j · p) + √(ε · ξ)]
+             + η_curiosity · √(λ_L · ξ)
 ```
 
 where **η = 0.10** (raised from 0.05 to reflect Ubuntu's centrality in the revised formula).
@@ -258,10 +259,38 @@ where **η = 0.10** (raised from 0.05 to reflect Ubuntu's centrality in the revi
 
 4. **Empathy × Truth (ε · ξ):** Perspective-taking (ε) + epistemic integrity (ξ) = accurate cross-group understanding (Fricker 2007). Empathy without truth = manipulated solidarity.
 
+5. **Love × Truth (λ_L · ξ):** Investigative drive (curiosity) + epistemic integrity = genuine inquiry (hooks 2000, Fricker 2007). Truth without love = surveillance. Love without truth = willful ignorance.
+
+### 3.3.1 Curiosity Cross-Pair (Love × Truth)
+
+```
+Ψ_curiosity = η_curiosity · √(λ_L · ξ)
+```
+
+where **η_curiosity = 0.08**.
+
+**Philosophical grounding:**
+- hooks (2000): Love is "the will to extend one's self for the purpose of nurturing one's own or another's spiritual growth." Curiosity is that extension directed at understanding.
+- Fricker (2007): Epistemic integrity requires not just accurate records but the *drive* to investigate when records are incomplete.
+- The detective system's constitution: "honest analysis is an act of care, not aggression."
+
+**Why a cross-pair, not a 9th construct:**
+Curiosity is not a capability in isolation. It is what emerges when love meets truth — the investigative impulse that makes someone follow a hunch into uncomfortable territory. It cannot exist without both:
+- Without love (λ_L suppressed by capitalism): curiosity collapses. You don't follow hunches when survival consumes capacity.
+- Without truth (ξ suppressed by institutions): curiosity has no target. You can't investigate what you can't see is missing.
+
+**Divergence detection:**
+The penalty term now includes (λ_L - ξ)²:
+- **Truth without love** (high ξ, low λ_L) = **surveillance**. Institutional transparency serving control, not care.
+- **Love without truth** (high λ_L, low ξ) = **willful ignorance**. Community solidarity refusing uncomfortable facts.
+
+**Application to hypothesis scoring:**
+Curiosity relevance = √(∂Φ/∂λ_L · ∂Φ/∂ξ). Hypotheses at the love/truth intersection — the hunches that nobody follows because they're economically irrational — surface higher in the ranking.
+
 ### 3.4 Penalty Term (Divergence Punishment)
 
 ```
-Ψ_penalty = μ · [(c - λ_L)² + (κ - λ_P)² + (j - p)² + (ε - ξ)²] / 4
+Ψ_penalty = μ · [(c - λ_L)² + (κ - λ_P)² + (j - p)² + (ε - ξ)² + (λ_L - ξ)²] / 5
 ```
 
 where **μ = 0.15**.
