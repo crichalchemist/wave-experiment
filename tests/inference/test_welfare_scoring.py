@@ -541,3 +541,53 @@ class TestCuriosityPatterns:
         text = "Following the trail of unanswered questions and unexplained gaps"
         constructs = infer_threatened_constructs(text)
         assert "lam_L" in constructs or "xi" in constructs
+
+
+class TestCuriositySynergy:
+    """Cross-pair synergy: love x truth = curiosity (investigative drive)."""
+
+    def test_curiosity_synergy_boosts_phi(self):
+        """High lam_L + high xi -> curiosity synergy bonus."""
+        from src.inference.welfare_scoring import ubuntu_synergy
+        base = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+
+        curious = dict(base)
+        curious["lam_L"] = 0.8
+        curious["xi"] = 0.8
+
+        surveillance = dict(base)
+        surveillance["lam_L"] = 0.1
+        surveillance["xi"] = 0.8
+
+        assert ubuntu_synergy(curious) > ubuntu_synergy(surveillance)
+
+    def test_curiosity_collapses_when_love_suppressed(self):
+        """Capitalism suppresses lam_L -> curiosity synergy collapses."""
+        from src.inference.welfare_scoring import ubuntu_synergy
+        base = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+
+        loving = dict(base)
+        loving["lam_L"] = 0.8
+
+        suppressed = dict(base)
+        suppressed["lam_L"] = 0.05
+
+        assert ubuntu_synergy(loving) > ubuntu_synergy(suppressed)
+
+    def test_curiosity_collapses_when_truth_suppressed(self):
+        """Institutional concealment suppresses xi -> curiosity synergy collapses."""
+        from src.inference.welfare_scoring import ubuntu_synergy
+        base = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+
+        truth_present = dict(base)
+        truth_present["xi"] = 0.8
+
+        truth_suppressed = dict(base)
+        truth_suppressed["xi"] = 0.05
+
+        assert ubuntu_synergy(truth_present) > ubuntu_synergy(truth_suppressed)
+
+    def test_eta_curiosity_constant_exists(self):
+        """ETA_CURIOSITY constant is defined and reasonable."""
+        from src.inference.welfare_scoring import ETA_CURIOSITY
+        assert 0.0 < ETA_CURIOSITY <= 0.15

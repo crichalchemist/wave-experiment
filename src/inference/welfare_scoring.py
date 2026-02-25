@@ -178,6 +178,7 @@ def community_multiplier(lam_L: float) -> float:
 
 ETA = 0.10   # Ubuntu synergy coupling strength
 MU = 0.15    # Divergence penalty coefficient
+ETA_CURIOSITY = 0.08  # Cross-pair curiosity coupling (love x truth)
 
 # Paired constructs: (a, b) — welfare gains emerge from relationships
 CONSTRUCT_PAIRS = [
@@ -187,19 +188,34 @@ CONSTRUCT_PAIRS = [
     ("eps", "xi"),        # Empathy x Truth: perspective-taking + epistemic integrity
 ]
 
+# Cross-pair coupling: love x truth = curiosity (investigative drive)
+# Not a primary pair — a diagonal synergy that emerges when care meets epistemic integrity.
+# hooks (2000): love as extension for growth + Fricker (2007): epistemic integrity
+# = the will to investigate, the hunch that won't let go.
+CURIOSITY_CROSS_PAIR = ("lam_L", "xi")
+
 
 def ubuntu_synergy(metrics: Dict[str, float]) -> float:
     """
     Ubuntu synergy term.
 
     Psi_ubuntu = 1 + eta * [sqrt(c*lam_L) + sqrt(kappa*lam_P) + sqrt(j*p) + sqrt(eps*xi)]
+                   + eta_curiosity * sqrt(lam_L * xi)
+
     Welfare gains emerge from relationships between constructs, not isolation.
+    The curiosity cross-pair (love x truth) adds the investigative drive:
+    you investigate because you care about truth, and that caring is love.
     """
     pair_sum = sum(
         math.sqrt(max(0.0, metrics.get(a, 0.5)) * max(0.0, metrics.get(b, 0.5)))
         for a, b in CONSTRUCT_PAIRS
     )
-    return 1.0 + ETA * pair_sum
+
+    # Curiosity: love aimed at truth
+    a, b = CURIOSITY_CROSS_PAIR
+    curiosity = math.sqrt(max(0.0, metrics.get(a, 0.5)) * max(0.0, metrics.get(b, 0.5)))
+
+    return 1.0 + ETA * pair_sum + ETA_CURIOSITY * curiosity
 
 
 def divergence_penalty(metrics: Dict[str, float]) -> float:
