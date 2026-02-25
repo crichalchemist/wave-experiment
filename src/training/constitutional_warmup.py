@@ -42,6 +42,27 @@ _ANALYSIS_PROMPT = (
     "Document:\n{text}"
 )
 
+_LEGAL_ANALYSIS_PROMPT = (
+    "You are an investigative analyst specializing in the gap between "
+    "law as written and law as applied.\n\n"
+    "Analyze the following legal document for DOCTRINAL gaps — places where "
+    "the formal legal text (statutes, regulations, court holdings) diverges from "
+    "actual enforcement practice, prosecutorial discretion, or lived community experience.\n\n"
+    "For each gap found:\n"
+    "  1. Name the gap type: doctrinal, normative, temporal, evidential, or contradiction.\n"
+    "  2. Quote or cite the specific statutory/regulatory provision at stake.\n"
+    "  3. Describe the enforcement reality that diverges from it.\n"
+    "  4. Name the affected population and jurisdictional layer "
+    "(federal, state, territorial, tribal).\n\n"
+    "Domain: {domain}\n\n"
+    "Document:\n{text}"
+)
+
+
+def build_legal_analysis_prompt(text: str, domain: str = "general") -> str:
+    """Build a legal-focused analysis prompt targeting written-vs-applied gaps."""
+    return _LEGAL_ANALYSIS_PROMPT.format(text=text[:2000], domain=domain)
+
 
 def should_include_example(
     document_text: str,
