@@ -218,18 +218,29 @@ def ubuntu_synergy(metrics: Dict[str, float]) -> float:
     return 1.0 + ETA * pair_sum + ETA_CURIOSITY * curiosity
 
 
+# All penalty pairs: 4 primary + 1 curiosity cross-pair
+PENALTY_PAIRS = CONSTRUCT_PAIRS + [CURIOSITY_CROSS_PAIR]
+
+
 def divergence_penalty(metrics: Dict[str, float]) -> float:
     """
     Divergence penalty for paired construct mismatches.
 
-    Psi_penalty = mu * [(c-lam_L)^2 + (kappa-lam_P)^2 + (j-p)^2 + (eps-xi)^2] / 4
-    Penalizes care-without-love (paternalism) and similar structural distortions.
+    Psi_penalty = mu * [(c-lam_L)^2 + (kappa-lam_P)^2 + (j-p)^2 + (eps-xi)^2
+                        + (lam_L-xi)^2] / 5
+
+    Penalizes structural distortions:
+      - care-without-love (paternalism)
+      - compassion-without-protection (vulnerable support)
+      - joy-without-purpose (hedonic treadmill)
+      - empathy-without-truth (manipulated solidarity)
+      - truth-without-love (surveillance) / love-without-truth (willful ignorance)
     """
     sq_sum = sum(
         (metrics.get(a, 0.5) - metrics.get(b, 0.5)) ** 2
-        for a, b in CONSTRUCT_PAIRS
+        for a, b in PENALTY_PAIRS
     )
-    return MU * sq_sum / len(CONSTRUCT_PAIRS)
+    return MU * sq_sum / len(PENALTY_PAIRS)
 
 
 def compute_phi(metrics: Dict[str, float]) -> float:

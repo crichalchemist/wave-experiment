@@ -591,3 +591,44 @@ class TestCuriositySynergy:
         """ETA_CURIOSITY constant is defined and reasonable."""
         from src.inference.welfare_scoring import ETA_CURIOSITY
         assert 0.0 < ETA_CURIOSITY <= 0.15
+
+
+class TestCuriosityDivergence:
+    """Divergence penalty for love/truth mismatch: surveillance and willful ignorance."""
+
+    def test_surveillance_penalty(self):
+        """High truth + low love (surveillance) triggers penalty."""
+        from src.inference.welfare_scoring import divergence_penalty
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        metrics["xi"] = 0.9
+        metrics["lam_L"] = 0.1
+
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert divergence_penalty(metrics) > divergence_penalty(balanced)
+
+    def test_willful_ignorance_penalty(self):
+        """High love + low truth (willful ignorance) triggers penalty."""
+        from src.inference.welfare_scoring import divergence_penalty
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        metrics["lam_L"] = 0.9
+        metrics["xi"] = 0.1
+
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert divergence_penalty(metrics) > divergence_penalty(balanced)
+
+    def test_surveillance_detected_in_full_phi(self):
+        """Surveillance state: high xi, high lam_P, low lam_L -> Phi lower than balanced."""
+        from src.inference.welfare_scoring import compute_phi
+        surveillance = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        surveillance["xi"] = 0.8
+        surveillance["lam_P"] = 0.8
+        surveillance["lam_L"] = 0.1
+
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert compute_phi(balanced) > compute_phi(surveillance)
+
+    def test_no_curiosity_penalty_when_balanced(self):
+        """Equal lam_L and xi -> no curiosity divergence."""
+        from src.inference.welfare_scoring import divergence_penalty
+        metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert divergence_penalty(metrics) == 0.0
