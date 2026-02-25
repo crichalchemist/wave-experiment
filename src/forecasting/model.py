@@ -8,15 +8,22 @@ with two ForecastHead decoders:
 Multi-task loss: L = L_phi + alpha * L_construct (both MSE).
 """
 
+import os
 import sys
-
-if "Dignity-Model" not in sys.path:
-    sys.path.insert(0, "Dignity-Model")
 
 import torch
 import torch.nn as nn
-from models.backbone.hybrid import DignityBackbone
-from models.head.forecast import ForecastHead
+
+# Add Dignity-Model to sys.path so its 'models' package (with relative imports)
+# resolves correctly. The 'core' namespace collision with tests/core/ doesn't
+# affect 'models' — only signals.py needs the importlib workaround.
+_dignity_root = os.path.join(os.path.dirname(__file__), "..", "..", "Dignity-Model")
+_dignity_root = os.path.abspath(_dignity_root)
+if _dignity_root not in sys.path:
+    sys.path.insert(0, _dignity_root)
+
+from models.backbone.hybrid import DignityBackbone  # noqa: E402
+from models.head.forecast import ForecastHead  # noqa: E402
 
 
 class PhiForecaster(nn.Module):
