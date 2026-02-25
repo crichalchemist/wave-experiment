@@ -1,6 +1,6 @@
 """Unit tests for welfare scoring module."""
 from unittest.mock import patch
-from src.inference.welfare_scoring import infer_threatened_constructs, phi_gradient_wrt, score_hypothesis_welfare, compute_gap_urgency
+from src.inference.welfare_scoring import infer_threatened_constructs, phi_gradient_wrt, score_hypothesis_welfare, score_hypothesis_curiosity, compute_gap_urgency
 from src.detective.hypothesis import Hypothesis
 from src.core.types import Gap, GapType
 from dataclasses import replace
@@ -632,3 +632,53 @@ class TestCuriosityDivergence:
         from src.inference.welfare_scoring import divergence_penalty
         metrics = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
         assert divergence_penalty(metrics) == 0.0
+
+
+class TestScoreHypothesisCuriosity:
+    """Curiosity scoring: geometric mean of lam_L and xi gradients."""
+
+    def test_high_curiosity_when_both_scarce(self):
+        """Both love and truth scarce -> high curiosity relevance."""
+        from src.inference.welfare_scoring import score_hypothesis_curiosity
+        h = Hypothesis.create("Unexplained gap in oversight records", 0.6)
+        h = replace(h, threatened_constructs=("lam_L", "xi"))
+
+        score = score_hypothesis_curiosity(h, {"lam_L": 0.1, "xi": 0.1})
+        assert score > 0.45  # geometric mean of scarce gradients, normalized
+
+    def test_low_curiosity_when_both_abundant(self):
+        """Both love and truth abundant -> low curiosity relevance."""
+        from src.inference.welfare_scoring import score_hypothesis_curiosity
+        h = Hypothesis.create("Routine documentation review", 0.6)
+        h = replace(h, threatened_constructs=("lam_L", "xi"))
+
+        score = score_hypothesis_curiosity(h, {"lam_L": 0.9, "xi": 0.9})
+        assert score < 0.3
+
+    def test_low_curiosity_when_one_abundant(self):
+        """One scarce, one abundant -> moderate curiosity (geometric mean pulls down)."""
+        from src.inference.welfare_scoring import score_hypothesis_curiosity
+        h = Hypothesis.create("Something off here", 0.5)
+        h = replace(h, threatened_constructs=("lam_L", "xi"))
+
+        both_scarce = score_hypothesis_curiosity(h, {"lam_L": 0.1, "xi": 0.1})
+        one_scarce = score_hypothesis_curiosity(h, {"lam_L": 0.1, "xi": 0.9})
+        assert both_scarce > one_scarce
+
+    def test_no_curiosity_constructs_returns_zero(self):
+        """Hypothesis threatening neither lam_L nor xi -> curiosity 0."""
+        from src.inference.welfare_scoring import score_hypothesis_curiosity
+        h = Hypothesis.create("Resource allocation gap", 0.8)
+        h = replace(h, threatened_constructs=("c",))
+
+        score = score_hypothesis_curiosity(h, {"c": 0.1})
+        assert score == 0.0
+
+    @_force_keyword
+    def test_curiosity_inferred_from_text(self, _mock):
+        """Curiosity keywords in text trigger lam_L + xi -> curiosity scored."""
+        from src.inference.welfare_scoring import score_hypothesis_curiosity
+        h = Hypothesis.create("This warrants further inquiry into the discrepancy", 0.5)
+
+        score = score_hypothesis_curiosity(h, {"lam_L": 0.2, "xi": 0.2})
+        assert score > 0.3

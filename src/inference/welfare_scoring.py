@@ -436,6 +436,44 @@ def score_hypothesis_welfare(
     return min(1.0, max(0.0, normalized))
 
 
+def score_hypothesis_curiosity(
+    hypothesis: "Hypothesis",  # type: ignore
+    phi_metrics: Dict[str, float],
+) -> float:
+    """
+    Compute curiosity relevance for a hypothesis.
+
+    Curiosity = sqrt(gradient_lam_L * gradient_xi), normalized to [0, 1].
+
+    The geometric mean ensures both love AND truth must be scarce for
+    curiosity to be high. If either is abundant, the score drops —
+    you don't need investigative drive when the answers are already available,
+    and you can't sustain investigation without the love that powers the hunch.
+
+    Returns 0.0 if the hypothesis doesn't threaten lam_L or xi.
+    """
+    if not hypothesis.threatened_constructs:
+        constructs = infer_threatened_constructs(hypothesis.text)
+    else:
+        constructs = hypothesis.threatened_constructs
+
+    has_love = "lam_L" in constructs
+    has_truth = "xi" in constructs
+
+    if not (has_love or has_truth):
+        return 0.0
+
+    g_love = phi_gradient_wrt("lam_L", phi_metrics) if has_love else 0.0
+    g_truth = phi_gradient_wrt("xi", phi_metrics) if has_truth else 0.0
+
+    # Geometric mean: both must be present for curiosity to fire
+    raw = math.sqrt(max(0.0, g_love) * max(0.0, g_truth))
+
+    # Normalize to [0, 1]
+    k = 1.0
+    return min(1.0, max(0.0, raw / (raw + k)))
+
+
 def compute_gap_urgency(gap: "Gap", phi_metrics: Dict[str, float]) -> float:  # type: ignore
     """
     Compute investigative urgency for a detected gap.
