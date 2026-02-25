@@ -508,3 +508,36 @@ class TestDesignVerificationCriteria:
 
         sig_urgency = inspect.signature(compute_gap_urgency)
         assert list(sig_urgency.parameters.keys()) == ["gap", "phi_metrics"]
+
+
+class TestCuriosityPatterns:
+    """Curiosity keywords trigger both lam_L and xi constructs."""
+
+    @_force_keyword
+    def test_curiosity_triggers_love(self, _mock):
+        """Curiosity-related text triggers lam_L (love as investigative drive)."""
+        text = "The inquiry revealed a deeper pattern worth investigating"
+        constructs = infer_threatened_constructs(text)
+        assert "lam_L" in constructs
+
+    @_force_keyword
+    def test_curiosity_triggers_truth(self, _mock):
+        """Curiosity-related text triggers xi (truth-seeking)."""
+        text = "The inquiry revealed a deeper pattern worth investigating"
+        constructs = infer_threatened_constructs(text)
+        assert "xi" in constructs
+
+    @_force_keyword
+    def test_hunch_triggers_both(self, _mock):
+        """A hunch — low-confidence but persistent pull — triggers love and truth."""
+        text = "Something about this discrepancy warrants further scrutiny"
+        constructs = infer_threatened_constructs(text)
+        assert "lam_L" in constructs
+        assert "xi" in constructs
+
+    @_force_keyword
+    def test_pure_investigation_text(self, _mock):
+        """Pure investigative drive text triggers curiosity coupling."""
+        text = "Following the trail of unanswered questions and unexplained gaps"
+        constructs = infer_threatened_constructs(text)
+        assert "lam_L" in constructs or "xi" in constructs

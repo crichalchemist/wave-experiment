@@ -63,17 +63,29 @@ _TRUTH_PATTERNS = frozenset({
     "omission", "cover-up", "distortion", "manipulation"
 })
 
+# Curiosity patterns: the investigative drive where love meets truth.
+# hooks (2000): love is "the will to extend one's self for growth."
+# Curiosity is that extension directed at understanding.
+# These patterns fire BOTH lam_L and xi, because curiosity lives at their intersection.
+_CURIOSITY_PATTERNS = frozenset({
+    "inquiry", "investigate", "investigating", "hunch", "curiosity",
+    "scrutiny", "discrepancy", "unanswered", "unexplained", "dig deeper",
+    "follow the trail", "look closer", "something doesn't add up",
+    "warrants further", "worth investigating", "pull on this thread",
+})
+
 # Map patterns to Phi construct names (matching humanity.md symbols)
 # 8 constructs: split former "lam" into "lam_L" (love) and "lam_P" (protection)
+# Curiosity patterns fire both lam_L and xi (love aimed at truth)
 _CONSTRUCT_PATTERNS = {
     "c": _CARE_PATTERNS,
     "kappa": _COMPASSION_PATTERNS,
     "j": _JOY_PATTERNS,
     "p": _PURPOSE_PATTERNS,
     "eps": _EMPATHY_PATTERNS,
-    "lam_L": _LOVE_PATTERNS,
+    "lam_L": _LOVE_PATTERNS | _CURIOSITY_PATTERNS,
     "lam_P": _PROTECTION_PATTERNS,
-    "xi": _TRUTH_PATTERNS,
+    "xi": _TRUTH_PATTERNS | _CURIOSITY_PATTERNS,
 }
 
 # ---------------------------------------------------------------------------
