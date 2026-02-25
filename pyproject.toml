@@ -41,7 +41,7 @@ dev = [
 detective = "src.cli.main:cli"
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "Dignity-Model"]
 
 [build-system]
 requires = ["setuptools>=68.0"]
