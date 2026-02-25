@@ -682,3 +682,83 @@ class TestScoreHypothesisCuriosity:
 
         score = score_hypothesis_curiosity(h, {"lam_L": 0.2, "xi": 0.2})
         assert score > 0.3
+
+
+class TestCuriosityVerificationCriteria:
+    """Explicit verification of all curiosity coupling design criteria."""
+
+    def test_criterion_1_both_high_synergy_fires(self):
+        """Both love and truth high -> curiosity synergy fires -> Phi increases."""
+        from src.inference.welfare_scoring import compute_phi
+        base = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+
+        curious = dict(base)
+        curious["lam_L"] = 0.8
+        curious["xi"] = 0.8
+
+        assert compute_phi(curious) > compute_phi(base)
+
+    def test_criterion_2_capitalism_kills_curiosity(self):
+        """Love suppressed (capitalism) -> curiosity collapses -> investigation degrades."""
+        from src.inference.welfare_scoring import compute_phi
+        base = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+
+        loving = dict(base)
+        loving["lam_L"] = 0.8
+        loving["xi"] = 0.8
+
+        exploited = dict(base)
+        exploited["lam_L"] = 0.05  # capitalism suppresses love
+        exploited["xi"] = 0.8      # truth available but no drive to pursue it
+
+        assert compute_phi(loving) > 2 * compute_phi(exploited)
+
+    def test_criterion_3_surveillance(self):
+        """Truth without love -> surveillance penalty."""
+        from src.inference.welfare_scoring import divergence_penalty
+        surveillance = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        surveillance["xi"] = 0.9
+        surveillance["lam_L"] = 0.1
+
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert divergence_penalty(surveillance) > divergence_penalty(balanced)
+
+    def test_criterion_4_willful_ignorance(self):
+        """Love without truth -> willful ignorance penalty."""
+        from src.inference.welfare_scoring import divergence_penalty
+        ignorant = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        ignorant["lam_L"] = 0.9
+        ignorant["xi"] = 0.1
+
+        balanced = {c: 0.5 for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]}
+        assert divergence_penalty(ignorant) > divergence_penalty(balanced)
+
+    @_force_keyword
+    def test_criterion_5_curiosity_patterns_boost_detection(self, _mock):
+        """Curiosity patterns in text boost both lam_L and xi detection."""
+        text = "This warrants further inquiry into the unexplained discrepancy"
+        constructs = infer_threatened_constructs(text)
+        assert "lam_L" in constructs
+        assert "xi" in constructs
+
+    def test_criterion_6_hunch_surfaces(self):
+        """Hypothesis with curiosity gets boosted combined_score."""
+        hunch = Hypothesis.create("Something doesn't add up", 0.4)
+        hunch = replace(hunch, welfare_relevance=0.3, curiosity_relevance=0.9)
+
+        routine = Hypothesis.create("Standard procedure confirmed", 0.6)
+        routine = replace(routine, welfare_relevance=0.1, curiosity_relevance=0.0)
+
+        assert hunch.combined_score() > routine.combined_score()
+
+    def test_criterion_7_existing_api_unchanged(self):
+        """API signatures unchanged."""
+        import inspect
+        sig = inspect.signature(phi_gradient_wrt)
+        assert list(sig.parameters.keys()) == ["construct", "metrics"]
+
+        sig = inspect.signature(score_hypothesis_welfare)
+        assert list(sig.parameters.keys()) == ["hypothesis", "phi_metrics"]
+
+        sig = inspect.signature(compute_gap_urgency)
+        assert list(sig.parameters.keys()) == ["gap", "phi_metrics"]
