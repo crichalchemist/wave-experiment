@@ -50,6 +50,7 @@ models/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
+!notebooks/*.ipynb
 
 # Logs
 *.log
@@ -72,7 +73,7 @@ node_modules/
 package-lock.json
 
 # Temporary/research files
-circleback.txt
+thoughts.txt
 pdf_insights.md
 construction research/
 src/data/smiles and cries/
