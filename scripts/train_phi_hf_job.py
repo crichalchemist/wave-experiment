@@ -322,9 +322,13 @@ def main():
     # --- Init Trackio ---
     token = os.environ.get("HF_TOKEN")
     trackio.init(
-        repo_id="crichalchemist/phi-forecaster-training",
-        token=token,
-        auto_create=True,
+        project="phi-forecaster-training",
+        name="gpu-100ep-a10g",
+        config={
+            "hidden_size": hidden_size, "n_layers": 2, "pred_len": pred_len,
+            "seq_len": seq_len, "lr": lr, "batch_size": batch_size, "epochs": epochs,
+            "scenarios_per_type": scenarios_per_type,
+        },
     )
 
     # --- Generate data ---
