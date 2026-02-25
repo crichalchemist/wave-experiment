@@ -174,3 +174,29 @@ def dpo(data: str, model_id: str | None, output_dir: str, eval_split: float) -> 
     save_path = output_dir or DPO_OUTPUT_DIR
     trainer.save_model(save_path)
     click.echo(f"Training complete. Model saved to {save_path}")
+
+
+@cli.command("legal-warmup")
+@click.option("--output", default="data/training/legal_pairs.jsonl", help="Output JSONL path")
+@click.option("--examples-per-domain", default=200, type=int, help="Pairs per legal domain")
+@click.option("--domains", default="criminal_justice,territorial_rights,foia_transparency",
+              help="Comma-separated legal domains")
+@click.option("--constitution", default="docs/constitution.md", help="Constitution path")
+def legal_warmup(output: str, examples_per_domain: int, domains: str, constitution: str) -> None:
+    """Generate legal domain DPO preference pairs (written vs. applied)."""
+    from src.training.legal_warmup import run_legal_warmup, LegalWarmupConfig
+    from src.core.providers import critic_provider_from_env
+
+    local = provider_from_env()
+    critic = critic_provider_from_env()
+
+    domain_tuple = tuple(d.strip() for d in domains.split(","))
+
+    cfg = LegalWarmupConfig(
+        output_path=output,
+        examples_per_domain=examples_per_domain,
+        domains=domain_tuple,
+        constitution_path=constitution,
+    )
+    count = run_legal_warmup(cfg, local_provider=local, critic_provider=critic)
+    click.echo(f"Generated {count} legal preference pairs → {output}")
