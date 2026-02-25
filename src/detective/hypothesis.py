@@ -15,9 +15,13 @@ class Hypothesis:
     timestamp: datetime
     parent_id: str | None = None
 
-    # NEW: Welfare grounding fields
+    # Welfare grounding fields
     welfare_relevance: float = 0.0  # [0, 1] score from welfare_scoring
     threatened_constructs: tuple[str, ...] = ()  # e.g., ("c", "lam_P")
+
+    # Curiosity: love aimed at truth (lam_L x xi coupling)
+    curiosity_relevance: float = 0.0  # [0, 1] — how strongly this hypothesis
+                                       # sits at the love/truth intersection
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):
@@ -27,6 +31,10 @@ class Hypothesis:
         if not (0.0 <= self.welfare_relevance <= 1.0):
             raise ValueError(
                 f"Hypothesis.welfare_relevance must be in [0.0, 1.0], got {self.welfare_relevance!r}"
+            )
+        if not (0.0 <= self.curiosity_relevance <= 1.0):
+            raise ValueError(
+                f"Hypothesis.curiosity_relevance must be in [0.0, 1.0], got {self.curiosity_relevance!r}"
             )
 
     @classmethod
@@ -50,18 +58,32 @@ class Hypothesis:
             parent_id=self.id
         )
 
-    def combined_score(self, alpha: float = 0.7, beta: float = 0.3) -> float:
+    def combined_score(
+        self,
+        alpha: float = 0.55,
+        beta: float = 0.30,
+        gamma: float = 0.15,
+    ) -> float:
         """
-        Weighted combination of epistemic confidence and welfare relevance.
+        Weighted combination of epistemic confidence, welfare relevance,
+        and curiosity relevance.
 
-        alpha > beta ensures epistemic honesty remains primary (Constitution Principle 1).
-        Default: α=0.7, β=0.3 (epistemic confidence is >2× as important as welfare).
+        alpha > beta > gamma ensures epistemic honesty remains primary
+        (Constitution Principle 1), while curiosity can surface hunches
+        that would otherwise be buried by low confidence.
+
+        Default: alpha=0.55, beta=0.30, gamma=0.15 (sum=1.0).
 
         Args:
             alpha: Weight for epistemic confidence
             beta: Weight for welfare relevance
+            gamma: Weight for curiosity relevance (love aimed at truth)
 
         Returns:
             Combined score in [0, 1]
         """
-        return alpha * self.confidence + beta * self.welfare_relevance
+        return (
+            alpha * self.confidence
+            + beta * self.welfare_relevance
+            + gamma * self.curiosity_relevance
+        )

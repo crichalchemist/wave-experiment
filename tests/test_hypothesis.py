@@ -59,13 +59,58 @@ def test_hypothesis_welfare_relevance_validation():
 
 
 def test_hypothesis_combined_score():
-    """combined_score() computes α·confidence + β·welfare."""
+    """combined_score() computes alpha*confidence + beta*welfare + gamma*curiosity."""
     h = Hypothesis.create("Test", 0.8)
     h = replace(h, welfare_relevance=0.6)
 
-    # Default α=0.7, β=0.3
-    # 0.7*0.8 + 0.3*0.6 = 0.56 + 0.18 = 0.74
-    assert h.combined_score() == pytest.approx(0.74)
+    # Default alpha=0.55, beta=0.30, gamma=0.15, curiosity_relevance=0.0
+    # 0.55*0.8 + 0.30*0.6 + 0.15*0.0 = 0.44 + 0.18 + 0.0 = 0.62
+    assert h.combined_score() == pytest.approx(0.62)
 
-    # Custom weights
-    assert h.combined_score(alpha=0.5, beta=0.5) == pytest.approx(0.7)
+    # Explicit old-style weights (backward compat: set gamma=0)
+    assert h.combined_score(alpha=0.7, beta=0.3, gamma=0.0) == pytest.approx(0.74)
+
+
+def test_hypothesis_curiosity_field_default():
+    """Curiosity relevance defaults to 0.0 for backward compatibility."""
+    h = Hypothesis.create("Test hypothesis", 0.6)
+    assert h.curiosity_relevance == 0.0
+
+
+def test_hypothesis_curiosity_field_accepts_value():
+    """Curiosity relevance can be set via replace."""
+    h = Hypothesis.create("Something doesn't add up", 0.5)
+    h = replace(h, curiosity_relevance=0.8)
+    assert h.curiosity_relevance == 0.8
+
+
+def test_hypothesis_curiosity_relevance_validation():
+    """Curiosity relevance must be in [0, 1]."""
+    h = Hypothesis.create("Test", 0.5)
+    with pytest.raises(ValueError, match="curiosity_relevance must be in"):
+        replace(h, curiosity_relevance=1.5)
+    with pytest.raises(ValueError, match="curiosity_relevance must be in"):
+        replace(h, curiosity_relevance=-0.1)
+
+
+def test_hypothesis_combined_score_with_curiosity():
+    """combined_score includes curiosity term."""
+    h = Hypothesis.create("Test", 0.8)
+    h = replace(h, welfare_relevance=0.6, curiosity_relevance=1.0)
+
+    # Default: alpha=0.55, beta=0.30, gamma=0.15
+    # 0.55*0.8 + 0.30*0.6 + 0.15*1.0 = 0.44 + 0.18 + 0.15 = 0.77
+    assert h.combined_score() == pytest.approx(0.77)
+
+
+def test_hypothesis_curiosity_surfaces_hunches():
+    """A low-confidence hunch with high curiosity outranks a boring high-confidence finding."""
+    hunch = Hypothesis.create("Something doesn't add up in the financial records", 0.4)
+    hunch = replace(hunch, welfare_relevance=0.3, curiosity_relevance=0.9)
+
+    boring = Hypothesis.create("Meeting minutes confirm standard procedure", 0.6)
+    boring = replace(boring, welfare_relevance=0.1, curiosity_relevance=0.0)
+
+    # hunch: 0.55*0.4 + 0.30*0.3 + 0.15*0.9 = 0.22 + 0.09 + 0.135 = 0.445
+    # boring: 0.55*0.6 + 0.30*0.1 + 0.15*0.0 = 0.33 + 0.03 + 0.00  = 0.36
+    assert hunch.combined_score() > boring.combined_score()
