@@ -356,9 +356,7 @@ def load_model():
         n_layers=2, pred_len=PRED_LEN,
     )
     state_dict = torch.load(path, map_location="cpu", weights_only=True)
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
-    if missing or unexpected:
-        print(f"WARNING: missing={missing}, unexpected={unexpected}")
+    model.load_state_dict(state_dict, strict=True)
     model.eval()
     return model
 
@@ -600,22 +598,30 @@ with gr.Blocks(
 
             with gr.Row():
                 c_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Care (c)")
+                    CONSTRUCT_FLOORS["c"], 0.95, value=0.5, step=0.05,
+                    label="Care (c)")
                 kappa_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Compassion (\u03ba)")
+                    CONSTRUCT_FLOORS["kappa"], 0.95, value=0.5, step=0.05,
+                    label="Compassion (\u03ba)")
                 j_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Joy (j)")
+                    CONSTRUCT_FLOORS["j"], 0.95, value=0.5, step=0.05,
+                    label="Joy (j)")
                 p_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Purpose (p)")
+                    CONSTRUCT_FLOORS["p"], 0.95, value=0.5, step=0.05,
+                    label="Purpose (p)")
             with gr.Row():
                 eps_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Empathy (\u03b5)")
+                    CONSTRUCT_FLOORS["eps"], 0.95, value=0.5, step=0.05,
+                    label="Empathy (\u03b5)")
                 lam_L_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Love (\u03bb_L)")
+                    CONSTRUCT_FLOORS["lam_L"], 0.95, value=0.5, step=0.05,
+                    label="Love (\u03bb_L)")
                 lam_P_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Protection (\u03bb_P)")
+                    CONSTRUCT_FLOORS["lam_P"], 0.95, value=0.5, step=0.05,
+                    label="Protection (\u03bb_P)")
                 xi_slider = gr.Slider(
-                    0.05, 0.95, value=0.5, step=0.05, label="Truth (\u03be)")
+                    CONSTRUCT_FLOORS["xi"], 0.95, value=0.5, step=0.05,
+                    label="Truth (\u03be)")
 
             custom_btn = gr.Button("Generate & Forecast", variant="primary")
             phi_current_md = gr.Markdown("**Current \u03a6:** 0.500")
