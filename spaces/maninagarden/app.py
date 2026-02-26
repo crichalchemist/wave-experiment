@@ -200,8 +200,11 @@ def do_launch_training(key, epochs, lr, hidden_size, batch_size, scenarios_per_t
     return msg
 
 
-def inspect_data(scenario, seed):
+def inspect_data(key, scenario, seed):
     """Data Workshop: show raw trajectory + signal features."""
+    expected = os.environ.get("ADMIN_KEY", "")
+    if key != expected or not expected:
+        return None, None, None, "Not authenticated."
     rng = np.random.default_rng(int(seed))
     df = generate_scenario(scenario, length=200, rng=rng)
     features = compute_all_signals(df, window=20)
@@ -299,8 +302,10 @@ def compare_experiments(scenario, seed, revision_a, revision_b):
     def fmt(m):
         if not m:
             return "No metadata available"
+        val_loss = m.get('best_val_loss')
+        val_str = f"{val_loss:.6f}" if isinstance(val_loss, (int, float)) else str(val_loss or '?')
         return (f"**Epochs:** {m.get('epochs', '?')} | "
-                f"**Val Loss:** {m.get('best_val_loss', '?'):.6f} | "
+                f"**Val Loss:** {val_str} | "
                 f"**Formula:** {m.get('formula_version', 'unknown')}")
 
     meta_text = f"**A:** {fmt(meta_a)}\n\n**B:** {fmt(meta_b)}"
@@ -448,7 +453,7 @@ with gr.Blocks(
                 outputs=[dw_controls, dw_status],
             )
             dw_btn.click(
-                fn=inspect_data, inputs=[dw_scenario, dw_seed],
+                fn=inspect_data, inputs=[dw_key, dw_scenario, dw_seed],
                 outputs=[dw_raw, dw_heat, dw_phi, dw_stats],
             )
 

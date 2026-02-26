@@ -269,10 +269,16 @@ def compute_all_signals(df, window=20):
     for a, b in PENALTY_PAIRS:
         out[f"syn_{{a}}_{{b}}"] = synergy_signal(df[a].values, df[b].values, window)
         out[f"div_{{a}}_{{b}}"] = divergence_signal(df[a].values, df[b].values, window)
-    phi_vals = np.array([
-        compute_phi({{c: row[c] for c in ALL_CONSTRUCTS}})
-        for _, row in out[list(ALL_CONSTRUCTS)].iterrows()
-    ])
+    phi_vals = []
+    prev_row = None
+    for _, row in out[list(ALL_CONSTRUCTS)].iterrows():
+        metrics = {{c: row[c] for c in ALL_CONSTRUCTS}}
+        derivs = {{}}
+        if prev_row is not None:
+            derivs = {{c: metrics[c] - prev_row[c] for c in ALL_CONSTRUCTS}}
+        phi_vals.append(compute_phi(metrics, derivatives=derivs))
+        prev_row = metrics
+    phi_vals = np.array(phi_vals)
     out["phi"] = phi_vals
     out["dphi_dt"] = np.gradient(phi_vals)
     return out
@@ -348,7 +354,14 @@ def generate_scenario(scenario, length=200, rng=None):
     df = pd.DataFrame(d)
     for c in ALL_CONSTRUCTS:
         df[c] = df[c].clip(0.0, 1.0)
-    df["phi"] = df.apply(lambda row: compute_phi({{c: row[c] for c in ALL_CONSTRUCTS}}), axis=1)
+    phi_vals = []
+    for idx in range(len(df)):
+        metrics = {{c: df[c].iloc[idx] for c in ALL_CONSTRUCTS}}
+        derivs = {{}}
+        if idx > 0:
+            derivs = {{c: float(df[c].iloc[idx] - df[c].iloc[idx-1]) for c in ALL_CONSTRUCTS}}
+        phi_vals.append(compute_phi(metrics, derivatives=derivs))
+    df["phi"] = phi_vals
     return df
 
 
@@ -486,6 +499,7 @@ def main():
             df = generate_scenario(scenario, length=length, rng=rng)
             features = compute_all_signals(df, window=window)
 
+            # Scaler fit on FIRST scenario (stable_community, seed=42) — matches inference scaler
             if feature_names is None:
                 feature_names = list(features.columns)
                 scaler.fit(features.values)
