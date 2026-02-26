@@ -36,6 +36,8 @@ def price_momentum(prices, window=10):
     result = np.zeros_like(prices, dtype=np.float64)
     for i in range(window, len(prices)):
         result[i] = (prices[i] - prices[i - window]) / max(1e-10, abs(prices[i - window]))
+    if window < len(prices):
+        result[:window] = result[window]
     return result
 
 
@@ -72,22 +74,23 @@ def compute_all_signals(df, window=20):
         out[f"syn_{a}_{b}"] = synergy_signal(df[a].values, df[b].values, window)
         out[f"div_{a}_{b}"] = divergence_signal(df[a].values, df[b].values, window)
 
-    # Phi with finite-difference derivatives
-    n = len(out)
-    phi_vals = np.empty(n, dtype=np.float64)
-    prev_metrics = None
-    for idx in range(n):
-        row = out.iloc[idx]
-        metrics = {c: row[c] for c in ALL_CONSTRUCTS}
-        if idx == 0 or prev_metrics is None:
-            derivs = {}
-        else:
-            derivs = {c: metrics[c] - prev_metrics[c] for c in ALL_CONSTRUCTS}
-        phi_vals[idx] = compute_phi(metrics, derivatives=derivs)
-        prev_metrics = metrics
+    # Phi with finite-difference derivatives (skip if already computed upstream)
+    if "phi" not in out.columns:
+        n = len(out)
+        phi_vals = np.empty(n, dtype=np.float64)
+        prev_metrics = None
+        for idx in range(n):
+            row = out.iloc[idx]
+            metrics = {c: row[c] for c in ALL_CONSTRUCTS}
+            if idx == 0 or prev_metrics is None:
+                derivs = {}
+            else:
+                derivs = {c: metrics[c] - prev_metrics[c] for c in ALL_CONSTRUCTS}
+            phi_vals[idx] = compute_phi(metrics, derivatives=derivs)
+            prev_metrics = metrics
+        out["phi"] = phi_vals
 
-    out["phi"] = phi_vals
-    out["dphi_dt"] = np.gradient(phi_vals)
+    out["dphi_dt"] = np.gradient(out["phi"].values)
     return out
 
 

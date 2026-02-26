@@ -196,20 +196,21 @@ def compute_phi(
     # Community multiplier
     f_lam = community_multiplier(lam_L_raw)
 
-    # Equity weights (computed on raw metrics)
-    weights = equity_weights(metrics)
-
-    # Weighted geometric mean of RECOVERY-AWARE construct values
-    product = 1.0
+    # Step 1: compute effective (recovery-aware) values for ALL constructs
+    effective: Dict[str, float] = {}
     for c in ALL_CONSTRUCTS:
         x_raw = max(0.01, metrics.get(c, 0.5))
         floor_c = CONSTRUCT_FLOORS[c]
         dx_dt_c = derivatives.get(c, 0.0)
+        effective[c] = recovery_aware_input(x_raw, floor_c, dx_dt_c, lam_L_raw)
 
-        # Recovery-aware effective value
-        x_eff = recovery_aware_input(x_raw, floor_c, dx_dt_c, lam_L_raw)
-        x_eff = max(0.01, x_eff)  # numerical guard
+    # Step 2: equity weights computed on EFFECTIVE values (not raw)
+    weights = equity_weights(effective)
 
+    # Step 3: weighted geometric mean of effective construct values
+    product = 1.0
+    for c in ALL_CONSTRUCTS:
+        x_eff = max(0.01, effective[c])  # numerical guard
         product *= x_eff ** weights[c]
 
     # Synergy and penalty operate on RAW metrics

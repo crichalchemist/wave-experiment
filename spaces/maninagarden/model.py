@@ -115,28 +115,36 @@ class PhiForecasterGPU(nn.Module):
 
 def load_model(repo_id=MODEL_REPO, filename=CHECKPOINT_FILE, revision=None):
     """Download checkpoint from Hub and load into PhiForecasterGPU."""
-    path = hf_hub_download(repo_id=repo_id, filename=filename, revision=revision)
-    model = PhiForecasterGPU(
-        input_size=INPUT_SIZE, hidden_size=HIDDEN_SIZE,
-        n_layers=2, pred_len=PRED_LEN,
-    )
-    state_dict = torch.load(path, map_location="cpu", weights_only=True)
-    model.load_state_dict(state_dict, strict=True)
-    model.eval()
-    return model
+    try:
+        path = hf_hub_download(repo_id=repo_id, filename=filename, revision=revision)
+        model = PhiForecasterGPU(
+            input_size=INPUT_SIZE, hidden_size=HIDDEN_SIZE,
+            n_layers=2, pred_len=PRED_LEN,
+        )
+        state_dict = torch.load(path, map_location="cpu", weights_only=True)
+        model.load_state_dict(state_dict, strict=True)
+        model.eval()
+        return model
+    except Exception as e:
+        logger.error("Failed to load model from %s/%s (revision=%s): %s", repo_id, filename, revision, e)
+        raise
 
 
 def list_checkpoint_versions(repo_id=MODEL_REPO):
     """Return list of dicts with sha, date, message from repo commits (limit 20)."""
-    commits = list_repo_commits(repo_id, revision="main")
-    results = []
-    for commit in commits[:20]:
-        results.append({
-            "sha": commit.commit_id,
-            "date": commit.created_at.isoformat() if commit.created_at else None,
-            "message": commit.title,
-        })
-    return results
+    try:
+        commits = list_repo_commits(repo_id, revision="main")
+        results = []
+        for commit in commits[:20]:
+            results.append({
+                "sha": commit.commit_id,
+                "date": commit.created_at.isoformat() if commit.created_at else None,
+                "message": commit.title,
+            })
+        return results
+    except Exception as e:
+        logger.warning("Failed to list checkpoint versions from %s: %s", repo_id, e)
+        return []
 
 
 def load_training_metadata(repo_id=MODEL_REPO, revision=None):
