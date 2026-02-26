@@ -63,17 +63,27 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 **Multi-task loss formula** — `L_total = L_language + α·L_gap + β·L_assumption` (α=β=0.3). Three output heads: language modeling, gap-type classification, assumption-type classification.
 
 **A+B+C assumption taxonomy:**
-- Module A (`src/detective/module_a.py`): Cognitive biases (confirmation, anchoring, survivorship, ingroup)
-- Module B (planned `module_b.py`): Historical determinism — temporal language like "always", "continues to"
-- Module C (planned `module_c.py`): Geopolitical presumptions — unstated actor interests
+- Module A (`src/detective/module_a.py`): Cognitive biases (confirmation, anchoring, survivorship, ingroup) — DistilBERT classifier
+- Module B (`src/detective/module_b.py`): Historical determinism — regex triggers + LLM-scored spans
+- Module C (`src/detective/module_c.py`): Geopolitical presumptions — actor + verb pattern matching + LLM scoring
 
 **Special tokens** extend vocabulary: `<GAP>`, `<ASSUME_A>`, `<ASSUME_B>`, `<ASSUME_C>`, `<LINK>`, `<IMPLIED>`, `<CONTRADICTION>`, `<CONFIDENCE:>`.
 
-**n-hop confidence decay** — relationships degrade as `0.9 × 0.7^(hops-1)` per hop (defined in `IMPLEMENTATION_PLAN.md` Week 8).
+**n-hop confidence decay** — relationships degrade as `0.9 × 0.7^(hops-1)` per hop.
+
+**Graph of Thought (GoT) parallel hypothesis evolution** — `src/detective/parallel_evolution.py` implements Generate(k) via `asyncio.gather()`. Branches ranked by `combined_score = 0.55·confidence + 0.30·welfare_relevance + 0.15·curiosity_relevance`. SC-first branching: breadth below 0.5 confidence, depth above.
+
+**Phi(humanity) welfare function** — `src/inference/welfare_scoring.py` scores hypotheses by which welfare constructs they threaten. Gradients of Φ prioritize leads threatening scarce constructs. Curiosity coupling (love × truth) surfaces investigative hunches. Formula documented in `docs/humanity-phi-formalized.md`.
+
+**Phi Forecaster Space** — `spaces/maninagarden/` is a modular Gradio workbench (6 tabs) for forecasting welfare trajectories. `welfare.py` is the evolved formula source (v2.1-recovery-floors). Launches GPU training via HF Jobs. Live at `crichalchemist/maninagarden`.
 
 ### Implementation status
 
-Most `src/` modules are stubs with `# TODO`. Only `src/detective/hypothesis.py` and the CLI/model skeletons have working code. The canonical reference for all planned implementations is `IMPLEMENTATION_PLAN.md` (16-week phased plan). The PRD in `DETECTIVE_LLM_PRD.md` is the source-of-truth for system design.
+**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi formula, gradient prioritization, curiosity scoring), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry provider), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py`. Full test suite: 291+ tests passing.
+
+**Stubs:** `src/training/constitutional_warmup.py`, multi-task loss integration, document ingestion pipeline.
+
+**Design docs:** `docs/plans/` contains implementation plans and design docs. `docs/humanity-phi-formalized.md` is the welfare function paper. `docs/constitution.md` is the epistemic moral compass.
 
 ### Data layout (planned)
 
