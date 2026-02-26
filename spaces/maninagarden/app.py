@@ -708,4 +708,11 @@ with gr.Blocks(
 *\u03a6(humanity) is not a turnkey moral oracle. It is a disciplined framework forcing transparency about normative commitments while structurally preventing care-without-love dystopias and centering marginalized voices in the definition of flourishing.*
 """)
 
+    # Auto-run default scenario on page load so plots aren't empty
+    demo.load(
+        fn=explore_scenario,
+        inputs=[scenario_dropdown, seed_slider],
+        outputs=[scenario_description, phi_plot, construct_plot, attention_plot],
+    )
+
     demo.launch(show_error=True)
