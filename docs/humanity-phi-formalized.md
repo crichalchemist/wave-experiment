@@ -2,7 +2,7 @@
 ## Formalizing Human Welfare for AI Systems
 
 **Working Paper**
-**Version:** 2.0 (2026-02-19)
+**Version:** 2.1 (2026-02-26)
 **Status:** Under Development
 **Authors:** Research collaboration with Claude Opus 4.6
 **Project:** Detective LLM - Information Gap Analysis System
@@ -216,25 +216,87 @@ where:
 
 **Normalization:** Φ ∈ [0,1] by construction.
 
-### 3.2 Exponent Assignment (Concavity for Basic Needs)
+#### 3.1.1 Community Solidarity Multiplier
 
-On domain [0,1]:
-- **α < 1** → concave (diminishing returns, first units most valuable)
-- **α = 1** → linear
-- **α > 1** → convex (accelerating returns)
+```
+f(λ_L) = λ_L^γ     where γ = 0.5
+```
 
-| Construct Group | Exponent | Justification | Citation |
-|-----------------|----------|---------------|----------|
-| c, κ (basic needs) | α = 0.7 | **Concave:** First units matter most (Rawlsian priority) | Rawls 1971, Atkinson 1970 |
-| j, p (experiential) | α = 1.0 | **Linear:** No inherent satiation | Csikszentmihalyi 1990 |
-| ε, λ_L, λ_P (relational) | α = 0.8 | **Mildly concave:** Perspective-taking and support gains most valuable when scarce | hooks 2000, Berlin 1969 |
-| ξ (epistemic) | α = 1.0 | **Linear:** Truth is non-substitutable | Fricker 2007 |
+The square root ensures diminishing returns — moving λ_L from 0.04 to 0.25 (√: 0.2→0.5) matters more than moving from 0.64 to 0.81 (√: 0.8→0.9). This encodes Ubuntu's claim that community is the substrate, not a bonus: welfare doesn't *add* community on top, it *emerges from* community.
 
-**Gradient properties verified:**
-- At c = 0.1: ∂Φ/∂c ∝ c^(-0.3) ≈ 2.0 (HIGH priority)
-- At c = 0.9: ∂Φ/∂c ∝ c^(-0.3) ≈ 0.17 (LOW priority)
+| λ_L | f(λ_L) | Interpretation |
+|-----|--------|---------------|
+| 1.0 | 1.00 | Full community solidarity — welfare undiminished |
+| 0.5 | 0.71 | Moderate — 29% welfare degradation |
+| 0.25 | 0.50 | Low — 50% degradation |
+| 0.04 | 0.20 | Near-collapse — 80% degradation |
 
-This achieves the Rawlsian maximin intuition: improve the worst-off first.
+**Verification criterion:** Φ at λ_L=0.1 < 50% of Φ at λ_L=0.8.
+
+#### 3.1.2 Recovery-Aware Floors
+
+When a construct xᵢ falls below its hard floor (Nussbaum non-negotiable capability threshold), the effective input x̃ᵢ depends on two factors:
+
+```
+if xᵢ ≥ floorᵢ:
+    x̃ᵢ = xᵢ                    (pass through)
+else:
+    trajectory = σ(10·(dxᵢ/dt) − 3)      (own recovery trend)
+    community  = λ_L^0.5                   (community capacity)
+    recovery   = max(trajectory, community·0.5)
+    x̃ᵢ = xᵢ + (floorᵢ − xᵢ) · recovery
+```
+
+**Hard floors per construct:**
+
+| Construct | Floor | Rationale |
+|-----------|-------|-----------|
+| c (care) | 0.20 | Basic needs non-negotiable (Nussbaum 2000) |
+| κ (compassion) | 0.20 | Crisis response minimum |
+| λ_P (protection) | 0.20 | Safety non-negotiable (Berlin 1969) |
+| λ_L (love) | 0.15 | Community minimum |
+| ξ (truth) | 0.30 | Epistemic integrity highest floor (Fricker 2007) |
+| j (joy) | 0.10 | Lower but present |
+| p (purpose) | 0.10 | Lower but present |
+| ε (empathy) | 0.10 | Lower but present |
+
+**Key insight:** Community can partially compensate for stagnant trajectory. Care doesn't begin the uptick without community intervention. This produces three recovery signatures:
+
+1. **Healing trajectory + strong community** (dx/dt > 0, λ_L high) → rapid recovery toward floor
+2. **Stagnant + strong community** (dx/dt ≈ 0, λ_L high) → partial recovery (community compensates)
+3. **Stagnant + no community** (dx/dt ≈ 0, λ_L low) → near-raw value persists ("true collapse")
+
+The sigmoid bias of −3.0 ensures that dx/dt=0 maps to ~0.047 (not 0.5), preventing trajectory from dominating community capacity for all λ_L < 1.0.
+
+#### 3.1.3 Equity-Adjusted Weights
+
+```
+wᵢ = (1/x̃ᵢ) / Σⱼ(1/x̃ⱼ)
+```
+
+Weights are computed on **effective** (recovery-adjusted) values x̃ᵢ, not raw metrics. This means once recovery floors lift a below-floor construct's effective value, the weight shifts *less* toward that construct — it has been partially compensated.
+
+**Properties:**
+- Equal inputs (all x̃ᵢ = 0.5) → equal weights (wᵢ = 1/8)
+- One deprived construct (x̃_c = 0.1, others = 0.5) → care weight dominates (~0.42)
+- Weights always sum to 1.0
+
+This replaces the symmetric Nash θ = 1/8 with Rawlsian maximin: the formula automatically prioritizes whichever construct is most deprived, without manual weight tuning.
+
+### 3.2 Historical Note: Exponent Assignment
+
+> **Superseded in v2.1.** The v1.0/v2.0 formula used per-construct exponents αᵢ to encode concavity (diminishing returns for basic needs). In v2.1, these are replaced by **equity-adjusted weights** wᵢ = (1/x̃ᵢ)/Σ(1/x̃ⱼ) (see §3.1.3), which achieve the same Rawlsian maximin effect dynamically rather than through fixed exponents.
+
+The original assignment is preserved here for reference:
+
+| Construct Group | Exponent (v1.0-v2.0) | Justification | Citation |
+|-----------------|----------------------|---------------|----------|
+| c, κ (basic needs) | α = 0.7 | Concave: first units matter most | Rawls 1971, Atkinson 1970 |
+| j, p (experiential) | α = 1.0 | Linear: no inherent satiation | Csikszentmihalyi 1990 |
+| ε, λ_L, λ_P (relational) | α = 0.8 | Mildly concave | hooks 2000, Berlin 1969 |
+| ξ (epistemic) | α = 1.0 | Linear: truth is non-substitutable | Fricker 2007 |
+
+**Why equity weights are superior:** Fixed exponents cannot respond to the *current state* of deprivation. When care drops from 0.5 to 0.1, α=0.7 increases the gradient by a fixed ratio regardless of other constructs. Equity weights shift the entire weight vector toward care, amplifying the response in proportion to the actual imbalance across all eight dimensions.
 
 ### 3.3 Ubuntu Synergy Term (Relational Coupling)
 
@@ -295,46 +357,71 @@ Curiosity relevance = √(∂Φ/∂λ_L · ∂Φ/∂ξ). Hypotheses at the love/
 
 where **μ = 0.15**.
 
-**Effect:** Directly penalizes large divergence between paired constructs. A society with c=0.9, λ_L=0.1 incurs:
+**Five penalty pairs** (4 primary + 1 curiosity cross-pair):
+
+1. (c − λ_L)² — care-without-love = paternalism
+2. (κ − λ_P)² — compassion-without-protection = vulnerable support
+3. (j − p)² — joy-without-purpose = hedonic treadmill
+4. (ε − ξ)² — empathy-without-truth = manipulated solidarity
+5. (λ_L − ξ)² — truth-without-love = surveillance; love-without-truth = willful ignorance
+
+**Effect:** A society with c=0.9, λ_L=0.1 incurs:
 
 ```
-penalty = 0.15 · (0.8)² / 4 = 0.024
+penalty contribution from (c − λ_L)² = (0.8)² = 0.64
+total penalty = 0.15 · (0.64 + other terms) / 5
 ```
 
-This is small but load-bearing when combined with missing synergy (√(0.9 · 0.1) ≈ 0.30 vs. √(0.5 · 0.5) = 0.50).
+This is small per pair but load-bearing when combined with missing synergy (√(0.9 · 0.1) ≈ 0.30 vs. √(0.5 · 0.5) = 0.50).
 
 ### 3.5 Worked Examples
 
-**Case 1: Paternalistic Regime** (c=0.9, λ_L=0.1, λ_P=0.9, others=0.5)
+**Case 1: Balanced Moderate Society** (all = 0.5)
+
+```
+f(λ_L) = 0.5^0.5 = 0.707
+All x̃ᵢ = 0.5 (above all floors → pass through)
+All wᵢ = 1/8 (equal deprivation → equal weights)
+∏(x̃ᵢ^wᵢ) = 0.5^(8·1/8) = 0.5
+Ψ_ubuntu = 1 + 0.10·(4·0.5) + 0.08·0.5 = 1.24
+Ψ_penalty = 0 (all pairs balanced)
+Φ = 0.707 · 0.5 · 1.24 · 1.0 ≈ 0.438
+```
+
+**Case 2: Paternalistic Regime** (c=0.9, λ_L=0.1, λ_P=0.9, others=0.5)
 
 High material care + protection, but low developmental support:
 
-```python
-base ≈ 0.55  # diminished by low λ_L
-synergy = 1 + 0.05·(√0.09 + √0.81 + 0.5 + 0.5) ≈ 1.11
-penalty = 0.15·[(0.8)² + (-0.4)² + 0 + 0]/4 = 0.03
-Φ ≈ 0.55 · 1.11 · 0.97 ≈ 0.59
+```
+f(λ_L) = 0.1^0.5 = 0.316          # community collapse
+Equity weights: λ_L dominates (most deprived)
+Ψ_ubuntu: √(0.9·0.1)=0.30 vs √(0.5·0.5)=0.50 — diminished synergy
+Ψ_penalty: (0.9−0.1)² + (0.5−0.9)² + ... > 0
+Φ << 0.438                          # far below balanced case
 ```
 
-**Interpretation:** Scores moderately (0.59), not highly—the system correctly identifies that safeguarding without developmental support is incomplete welfare. Contrasts with utilitarian approaches that would score this highly based on resource provision alone.
-
-**Case 2: Balanced Moderate Society** (all = 0.5)
-
-```python
-base ≈ 0.578
-synergy = 1 + 0.05·(4 · 0.5) = 1.10
-penalty = 0
-Φ ≈ 0.578 · 1.10 ≈ 0.636
-```
+**Interpretation:** Paternalistic regime scores well below balanced society. The formula detects the structural distortion through three mechanisms: community multiplier collapse (f=0.316), equity weights shifting toward love, and divergence penalty firing on (c−λ_L)².
 
 **Case 3: Care-Without-Love Dystopia** (c=1, λ_L=0, others=0.5)
 
-```python
-base = 0  # any factor = 0 → product = 0
-Φ = 0
+```
+f(λ_L) = 0.01^0.5 ≈ 0.1           # near-zero (clamped at 0.01)
+x̃_λ_L ≈ floor recovery only       # recovery-aware floor lifts slightly
+Φ ≈ 0                               # multiplicative collapse
 ```
 
-**Interpretation:** Multiplicative structure **structurally prevents** dimensional collapse. Technical provision without developmental support = zero welfare.
+**Interpretation:** Multiplicative structure **structurally prevents** dimensional collapse. Technical provision without developmental support = near-zero welfare. The community multiplier alone drives Φ toward zero when λ_L collapses.
+
+**Case 4: Recovery Arc** (care drops to 0.05, community λ_L=0.6, dx_c/dt=0.3)
+
+```
+x̃_c = recovery_aware_input(0.05, 0.20, 0.3, 0.6)
+     = 0.05 + (0.20 − 0.05) · max(σ(0), 0.6^0.5 · 0.5)
+     = 0.05 + 0.15 · max(0.5, 0.387)
+     = 0.05 + 0.15 · 0.5 = 0.125
+```
+
+**Interpretation:** Care at 0.05 (far below 0.20 floor) recovers to effective 0.125 because: positive trajectory (dx/dt=0.3) provides sigmoid recovery of ~0.5, and community capacity (0.6^0.5·0.5 = 0.387) provides backup. Community alone couldn't reach 0.5 — the trajectory matters. But without community, recovery would be much slower.
 
 ---
 
@@ -668,6 +755,23 @@ Wilkerson, I. (2020). *Caste: The Origins of Our Discontents*. Random House.
 ---
 
 ## Changelog
+
+### Version 2.1 (2026-02-26): Recovery-Aware Floors + Equity Weights
+
+**Major revision:** Three structural additions to the formula.
+
+1. **Recovery-aware floors (§3.1.2):** Below-floor constructs receive community-mediated recovery potential via trajectory (dx/dt) and community capacity (λ_L^0.5). Key insight: care doesn't begin the uptick without community intervention. Sigmoid bias of −3.0 prevents trajectory from dominating community capacity.
+
+2. **Equity-adjusted weights on effective inputs (§3.1.3):** Weights wᵢ = (1/x̃ᵢ)/Σ(1/x̃ⱼ) computed on recovery-adjusted values, not raw metrics. Supersedes the fixed per-construct exponents (α=0.7/0.8/1.0) from v1.0-v2.0. Achieves Rawlsian maximin dynamically.
+
+3. **Curiosity cross-pair (§3.3.1):** Love × Truth diagonal synergy with η_curiosity=0.08. Divergence penalty expanded from 4 to 5 pairs, adding (λ_L − ξ)² for surveillance/willful-ignorance detection.
+
+**Implementation:** `spaces/maninagarden/welfare.py` is the reference implementation (formula v2.1-recovery-floors). Training job launched with recovery floors active in data generation for the first time.
+
+**Philosophical grounding:**
+- Recovery floors: Nussbaum (2000) non-negotiable capability thresholds + Ubuntu community-mediated recovery
+- Equity weights: Rawls (1971) maximin via dynamic inverse-deprivation
+- Curiosity: hooks (2000) love as extension for growth + Fricker (2007) epistemic integrity
 
 ### Version 2.0 (2026-02-19): Love/Protection Split
 
