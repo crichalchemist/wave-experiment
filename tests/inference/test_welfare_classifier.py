@@ -55,28 +55,36 @@ class TestWelfareClassifier:
         )
 
     def test_fallback_returns_zero_scores_when_model_missing(self):
-        """When the model file doesn't exist, returns all-zero scores."""
+        """When both Hub and local model fail, returns all-zero scores."""
         from pathlib import Path
         from src.inference.welfare_classifier import get_construct_scores, _load_welfare_classifier
 
         _load_welfare_classifier.cache_clear()
 
-        with patch('src.inference.welfare_classifier.MODEL_PATH', Path('/tmp/nonexistent_model')):
-            scores = get_construct_scores("Any text at all")
-            assert all(score == 0.0 for score in scores.values())
+        def _raise_os_error(*args, **kwargs):
+            raise OSError("Model not available")
+
+        with patch('src.inference.welfare_classifier.pipeline', _raise_os_error):
+            with patch('src.inference.welfare_classifier.MODEL_PATH', Path('/tmp/nonexistent_model')):
+                scores = get_construct_scores("Any text at all")
+                assert all(score == 0.0 for score in scores.values())
 
         _load_welfare_classifier.cache_clear()
 
     def test_fallback_infer_returns_empty_tuple(self):
-        """When the model is missing, infer_threatened_constructs returns ()."""
+        """When both Hub and local model are missing, infer_threatened_constructs returns ()."""
         from pathlib import Path
         from src.inference.welfare_classifier import infer_threatened_constructs, _load_welfare_classifier
 
         _load_welfare_classifier.cache_clear()
 
-        with patch('src.inference.welfare_classifier.MODEL_PATH', Path('/tmp/nonexistent_model')):
-            constructs = infer_threatened_constructs("Violence and harm")
-            assert constructs == ()
+        def _raise_os_error(*args, **kwargs):
+            raise OSError("Model not available")
+
+        with patch('src.inference.welfare_classifier.pipeline', _raise_os_error):
+            with patch('src.inference.welfare_classifier.MODEL_PATH', Path('/tmp/nonexistent_model')):
+                constructs = infer_threatened_constructs("Violence and harm")
+                assert constructs == ()
 
         _load_welfare_classifier.cache_clear()
 
@@ -86,3 +94,73 @@ class TestWelfareClassifier:
 
         expected = ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]
         assert CONSTRUCT_NAMES == expected
+
+
+class TestHubLoading:
+    """Test Hub-first loading with local fallback."""
+
+    def test_hub_model_id_is_configured(self):
+        """HUB_MODEL_ID constant points to the correct Hub repo."""
+        from src.inference.welfare_classifier import HUB_MODEL_ID
+        assert HUB_MODEL_ID == "crichalchemist/welfare-constructs-distilbert"
+
+    def test_load_tries_hub_first(self, monkeypatch):
+        """_load_welfare_classifier attempts Hub loading before local."""
+        import src.inference.welfare_classifier as wc
+        wc._load_welfare_classifier.cache_clear()
+
+        mock_pipeline = MagicMock(return_value=[
+            [{"label": f"LABEL_{i}", "score": 0.5} for i in range(8)]
+        ])
+
+        with patch("src.inference.welfare_classifier.pipeline", mock_pipeline):
+            wc._load_welfare_classifier()
+            mock_pipeline.assert_called_once()
+            call_args = mock_pipeline.call_args
+            assert "crichalchemist/welfare-constructs-distilbert" in str(call_args)
+
+        wc._load_welfare_classifier.cache_clear()
+
+    def test_fallback_to_local_when_hub_unavailable(self, monkeypatch):
+        """When Hub loading fails, falls back to local model path."""
+        import src.inference.welfare_classifier as wc
+        wc._load_welfare_classifier.cache_clear()
+
+        call_count = 0
+        def mock_pipeline_fn(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise OSError("Hub unreachable")
+            return MagicMock()
+
+        with patch("src.inference.welfare_classifier.pipeline", mock_pipeline_fn):
+            with patch("src.inference.welfare_classifier.MODEL_PATH") as mock_path:
+                mock_config = MagicMock()
+                mock_config.exists.return_value = True
+                mock_path.__truediv__ = MagicMock(return_value=mock_config)
+                mock_path.__str__ = MagicMock(return_value="models/welfare-constructs-distilbert")
+                try:
+                    wc._load_welfare_classifier()
+                except Exception:
+                    pass
+                assert call_count >= 2
+
+        wc._load_welfare_classifier.cache_clear()
+
+    def test_get_construct_scores_returns_zeros_when_no_model(self):
+        """get_construct_scores returns all zeros when no model is available anywhere."""
+        from pathlib import Path
+        import src.inference.welfare_classifier as wc
+        wc._load_welfare_classifier.cache_clear()
+
+        def _raise_os_error(*args, **kwargs):
+            raise OSError("Model not available")
+
+        with patch("src.inference.welfare_classifier.pipeline", _raise_os_error):
+            with patch("src.inference.welfare_classifier.MODEL_PATH", Path("/tmp/nonexistent_model")):
+                scores = wc.get_construct_scores("test text")
+                assert len(scores) == 8
+                assert all(v == 0.0 for v in scores.values())
+
+        wc._load_welfare_classifier.cache_clear()

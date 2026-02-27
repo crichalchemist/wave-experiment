@@ -14,7 +14,10 @@ from transformers import pipeline
 
 logger = logging.getLogger(__name__)
 
-# Model path (relative to project root)
+# Hub model ID (pushed by HF Jobs training)
+HUB_MODEL_ID = "crichalchemist/welfare-constructs-distilbert"
+
+# Local model path (relative to project root) — fallback for development/offline use
 MODEL_PATH = Path("models/welfare-constructs-distilbert")
 
 CONSTRUCT_NAMES = ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]
@@ -25,26 +28,37 @@ def _load_welfare_classifier():
     """
     Lazy-load fine-tuned DistilBERT (cached singleton).
 
-    Raises FileNotFoundError if model directory does not exist.
+    Tries loading from Hugging Face Hub first, falls back to local model path.
+    Raises FileNotFoundError if neither source is available.
     """
+    # Try Hub first
+    try:
+        logger.info(f"Loading welfare classifier from Hub: {HUB_MODEL_ID}...")
+        return pipeline(
+            "text-classification",
+            model=HUB_MODEL_ID,
+            device=0 if torch.cuda.is_available() else -1,
+            top_k=None,
+        )
+    except (OSError, Exception) as e:
+        logger.debug(f"Hub loading failed: {e}")
+
+    # Fallback to local
     config_file = MODEL_PATH / "config.json"
     if not config_file.exists():
         raise FileNotFoundError(
-            f"Welfare classifier not found at {MODEL_PATH}. "
-            f"Run scripts/train_welfare_classifier.py first."
+            f"Welfare classifier not found at Hub ({HUB_MODEL_ID}) "
+            f"or local ({MODEL_PATH}). "
+            f"Train with scripts/train_welfare_classifier_hf_job.py."
         )
 
-    logger.info(f"Loading welfare classifier from {MODEL_PATH}...")
-
-    classifier = pipeline(
+    logger.info(f"Loading welfare classifier from local: {MODEL_PATH}...")
+    return pipeline(
         "text-classification",
         model=str(MODEL_PATH),
         device=0 if torch.cuda.is_available() else -1,
         top_k=None,
     )
-
-    logger.info("Welfare classifier loaded")
-    return classifier
 
 
 def get_construct_scores(text: str) -> Dict[str, float]:
