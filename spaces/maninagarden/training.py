@@ -78,6 +78,7 @@ import math
 import os
 import json
 import logging
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -515,6 +516,50 @@ def main():
                 all_y_phi.append(phi_t.reshape(-1, 1))
                 ct = np.stack([df[c].values[j + seq_len:j + seq_len + pred_len] for c in ALL_CONSTRUCTS], axis=-1)
                 all_y_construct.append(ct)
+
+    # --- Load extracted scenarios (if available) ---
+    extracted_path = Path("extracted_scenarios.json")
+    if extracted_path.exists():
+        import json as _json
+        with open(extracted_path) as _f:
+            extracted_templates = _json.load(_f)
+        logger.info(f"Loading {{len(extracted_templates)}} extracted scenarios...")
+        for ext_idx, template in enumerate(extracted_templates):
+            for i in range(scenarios_per_type):
+                ext_rng = np.random.default_rng(seed + (len(SCENARIOS) + ext_idx) * 1000 + i)
+                # Generate from template: interpolate start → end with noise
+                ext_data = {{}}
+                for c in ALL_CONSTRUCTS:
+                    start = template["start_levels"].get(c, 0.5)
+                    end = template["end_levels"].get(c, 0.5)
+                    noise_scale = max(0.005, abs(end - start) * 0.05)
+                    ext_data[c] = np.linspace(start, end, length) + ext_rng.normal(0, noise_scale, length)
+                    ext_data[c] = np.clip(ext_data[c], 0.0, 1.0)
+                ext_df = pd.DataFrame(ext_data)
+                for c in ALL_CONSTRUCTS:
+                    ext_df[c] = ext_df[c].clip(0.0, 1.0)
+                phi_vals = []
+                for idx in range(len(ext_df)):
+                    metrics = {{c: ext_df[c].iloc[idx] for c in ALL_CONSTRUCTS}}
+                    derivs = {{}}
+                    if idx > 0:
+                        derivs = {{c: float(ext_df[c].iloc[idx] - ext_df[c].iloc[idx-1]) for c in ALL_CONSTRUCTS}}
+                    phi_vals.append(compute_phi(metrics, derivatives=derivs))
+                ext_df["phi"] = phi_vals
+
+                features = compute_all_signals(ext_df, window=window)
+                X = scaler.transform(features[feature_names].values)
+                for j in range(len(X) - seq_len - pred_len):
+                    all_X.append(X[j:j + seq_len])
+                    phi_t = ext_df["phi"].values[j + seq_len:j + seq_len + pred_len]
+                    if len(phi_t) < pred_len:
+                        continue
+                    all_y_phi.append(phi_t.reshape(-1, 1))
+                    ct = np.stack([ext_df[c].values[j + seq_len:j + seq_len + pred_len] for c in ALL_CONSTRUCTS], axis=-1)
+                    all_y_construct.append(ct)
+        logger.info(f"Total sequences after extracted scenarios: {{len(all_X)}}")
+    else:
+        logger.info("No extracted_scenarios.json found — using only hand-designed scenarios")
 
     X_all = torch.tensor(np.array(all_X), dtype=torch.float32)
     y_phi = torch.tensor(np.array(all_y_phi), dtype=torch.float32)
