@@ -71,19 +71,27 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 **n-hop confidence decay** — relationships degrade as `0.9 × 0.7^(hops-1)` per hop.
 
-**Graph of Thought (GoT) parallel hypothesis evolution** — `src/detective/parallel_evolution.py` implements Generate(k) via `asyncio.gather()`. Branches ranked by `combined_score = 0.55·confidence + 0.30·welfare_relevance + 0.15·curiosity_relevance`. SC-first branching: breadth below 0.5 confidence, depth above.
+**Graph of Thought (GoT) parallel hypothesis evolution** — `src/detective/parallel_evolution.py` implements Generate(k) via `asyncio.gather()`. When `phi_metrics` is provided, branches ranked by 4-weight `combined_score = 0.45·confidence + 0.25·welfare_relevance + 0.15·curiosity_relevance + 0.15·trajectory_urgency` (ADR-010). Without `phi_metrics`, falls back to confidence-only sorting. SC-first branching: breadth below 0.5 confidence, depth above.
 
 **Phi(humanity) welfare function** — `src/inference/welfare_scoring.py` scores hypotheses by which welfare constructs they threaten. Gradients of Φ prioritize leads threatening scarce constructs. Curiosity coupling (love × truth) surfaces investigative hunches. Formula documented in `docs/humanity-phi-formalized.md`.
 
 **Phi Forecaster Space** — `spaces/maninagarden/` is a modular Gradio workbench (6 tabs) for forecasting welfare trajectories. `welfare.py` is the evolved formula source (v2.1-recovery-floors). Launches GPU training via HF Jobs. Live at `crichalchemist/maninagarden`.
 
+**Detective-Forecaster bridge** — three-layer pipeline connecting the detective and forecaster (ADRs 009-011):
+- Layer 1: Welfare classifier (DistilBERT, 8-construct regression, MAE 0.164) trained on HF Jobs, loaded from Hub with local fallback (ADR-009)
+- Layer 2: Trajectory urgency — forecaster predicts whether welfare is declining, urgency feeds into 4-weight `combined_score` (ADR-010)
+- Layer 3: Scenario extraction — real text → construct profiles → trajectory patterns → synthetic training scenarios for forecaster (ADR-011)
+- Data flywheel: detective findings enrich forecaster training data, forecaster predictions inform detective prioritization
+
 ### Implementation status
 
-**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi formula, gradient prioritization, curiosity scoring), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry provider), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py`. Full test suite: 291+ tests passing.
+**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi formula, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry provider), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py` (includes `extract-scenarios` command). Full test suite: 531+ tests passing.
 
 **Stubs:** `src/training/constitutional_warmup.py`, multi-task loss integration, document ingestion pipeline.
 
 **Design docs:** `docs/plans/` contains implementation plans and design docs. `docs/humanity-phi-formalized.md` is the welfare function paper. `docs/constitution.md` is the epistemic moral compass.
+
+**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-011). Consult before making changes to the systems they cover.
 
 ### Data layout (planned)
 
@@ -99,3 +107,13 @@ checkpoints/               ← Model .pt files (gitignored)
 Tests import directly from `src.*` (no package install needed for pytest due to editable install). Test files live in `tests/` and mirror the `src/` module being tested (e.g., `tests/test_hypothesis.py` → `src/detective/hypothesis.py`).
 
 Target: 80%+ coverage, gap detection F1 >0.75, relationship precision >0.80.
+
+## Completion requirements
+
+When finishing a feature or architectural change, the following are required before the work is considered done:
+
+**Architecture Decision Record (ADR):** If the change introduces a new architectural pattern, modifies a Protocol/interface, adds a new subsystem, changes scoring formulas, or alters deployment strategy, write an ADR in `docs/vault/decisions/ADR-NNN-slug.md`. Follow the established format: YAML frontmatter (id, title, status, date, tags) + sections (Decision, Context, Consequences, Files). Number sequentially from the last ADR. Consult existing ADRs to avoid contradicting accepted decisions.
+
+**Test verification:** Run `pytest tests/ -q` and confirm 0 new failures before claiming completion.
+
+**CLAUDE.md update:** If the change affects architecture descriptions, test counts, or implementation status listed in this file, update the relevant sections.
