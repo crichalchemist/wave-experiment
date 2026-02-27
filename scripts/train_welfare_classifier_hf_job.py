@@ -286,13 +286,13 @@ def main():
 
     # --- Push to Hub ---
     logger.info(f"Pushing model to {{MODEL_REPO_ID}}...")
-    trainer.push_to_hub(
-        repo_id=MODEL_REPO_ID,
+    model.push_to_hub(
+        MODEL_REPO_ID,
         commit_message=f"Welfare classifier -- MAE={{metrics.get('eval_mae', -1):.4f}}",
         token=token,
     )
     tokenizer.push_to_hub(
-        repo_id=MODEL_REPO_ID,
+        MODEL_REPO_ID,
         token=token,
     )
 
