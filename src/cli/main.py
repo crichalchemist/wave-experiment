@@ -244,6 +244,60 @@ def scrape_foia(portal, collection, query, max_pages, output, ingest):
     click.echo(f"Saved document index to {index_path}")
 
 
+@cli.command("ingest")
+@click.argument("input_dir", type=click.Path(exists=True))
+@click.option("--evidence/--no-evidence", default=True, help="Run evidence pipeline")
+@click.option("--training/--no-training", default=True, help="Run training pipeline")
+@click.option("--output", "-o", type=click.Path(), default=None,
+              help="Output JSONL path for training data")
+def ingest(input_dir, evidence, training, output):
+    """Process scraped FOIA documents through evidence + training pipelines.
+
+    Reads extracted text from INPUT_DIR, runs welfare scoring on each document,
+    and outputs evidence results and/or training data JSONL.
+    """
+    import json
+    from pathlib import Path
+    from src.data.sourcing.foia_scraper import FOIADocument
+    from src.data.sourcing.dual_pipeline import run_dual_pipeline
+
+    input_path = Path(input_dir)
+
+    # Find text files to process
+    text_files = sorted(input_path.glob("**/*.txt"))
+    if not text_files:
+        click.echo(f"No .txt files found in {input_dir}")
+        return
+
+    # Build FOIADocument list from text files
+    docs = []
+    for text_file in text_files:
+        text = text_file.read_text(encoding="utf-8", errors="replace")
+        docs.append(FOIADocument(
+            source_portal="local",
+            title=text_file.stem,
+            url=str(text_file),
+            date=None,
+            collection=None,
+            text=text,
+            pdf_path=None,
+        ))
+
+    click.echo(f"Processing {len(docs)} documents from {input_dir}...")
+    result = run_dual_pipeline(docs)
+
+    if evidence:
+        click.echo(f"  Evidence results: {len(result['evidence'])} documents scored")
+
+    if training:
+        output_path = output or "data/training/foia_welfare_scored.jsonl"
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            for item in result["training"]:
+                f.write(json.dumps(item) + "\n")
+        click.echo(f"  Training data: {len(result['training'])} examples -> {output_path}")
+
+
 @cli.command("extract-scenarios")
 @click.argument("corpus_path", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default="spaces/maninagarden/extracted_scenarios.json",
