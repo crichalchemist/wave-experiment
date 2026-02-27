@@ -121,6 +121,56 @@ def test_highest_confidence_branch_first():
     assert confidences == sorted(confidences, reverse=True)
 
 
+def test_evolve_parallel_sets_trajectory_urgency():
+    """When phi_metrics provided, trajectory_urgency should be set."""
+    from src.detective.hypothesis import Hypothesis
+    from src.detective.parallel_evolution import evolve_parallel
+    from src.core.providers import MockProvider
+    from unittest.mock import patch
+
+    root = Hypothesis.create("Test gap hypothesis", 0.7)
+    provider = MockProvider(response="confidence: 0.6")
+    phi_metrics = {"c": 0.3, "kappa": 0.5, "j": 0.5, "p": 0.5,
+                   "eps": 0.5, "lam_L": 0.5, "lam_P": 0.5, "xi": 0.5}
+
+    with patch("src.inference.welfare_scoring.score_hypothesis_trajectory", return_value=0.7):
+        results = asyncio.run(evolve_parallel(
+            hypothesis=root,
+            evidence_list=["evidence A"],
+            provider=provider,
+            k=1,
+            phi_metrics=phi_metrics,
+        ))
+
+    assert len(results) == 1
+    assert results[0].hypothesis.trajectory_urgency == 0.7
+
+
+def test_evolve_parallel_uses_4_weight_scoring():
+    """With phi_metrics, sorting uses 4-weight combined_score."""
+    from src.detective.hypothesis import Hypothesis
+    from src.detective.parallel_evolution import evolve_parallel
+    from src.core.providers import MockProvider
+    from unittest.mock import patch
+
+    root = Hypothesis.create("Test", 0.5)
+    provider = MockProvider(response="confidence: 0.6")
+    phi_metrics = {"c": 0.3, "kappa": 0.5, "j": 0.5, "p": 0.5,
+                   "eps": 0.5, "lam_L": 0.5, "lam_P": 0.5, "xi": 0.5}
+
+    with patch("src.inference.welfare_scoring.score_hypothesis_trajectory", return_value=0.9):
+        results = asyncio.run(evolve_parallel(
+            hypothesis=root,
+            evidence_list=["ev A", "ev B"],
+            provider=provider,
+            k=2,
+            phi_metrics=phi_metrics,
+        ))
+
+    for r in results:
+        assert r.hypothesis.trajectory_urgency == 0.9
+
+
 @pytest.mark.asyncio
 async def test_welfare_scoring_applied_to_evolved_hypotheses():
     """Evolved hypotheses get welfare_relevance and threatened_constructs populated."""

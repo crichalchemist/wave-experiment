@@ -145,18 +145,21 @@ async def evolve_parallel(
         from src.inference.welfare_scoring import (
             score_hypothesis_welfare,
             infer_threatened_constructs,
+            score_hypothesis_trajectory,
         )
 
         for i, result in enumerate(results):
             h = result.hypothesis
             constructs = infer_threatened_constructs(h.text)
             welfare_score = score_hypothesis_welfare(h, phi_metrics)
+            trajectory_urgency = score_hypothesis_trajectory(h, phi_metrics)
 
             # Create updated hypothesis with welfare fields
             updated_h = replace(
                 h,
                 welfare_relevance=welfare_score,
                 threatened_constructs=constructs,
+                trajectory_urgency=trajectory_urgency,
             )
 
             # Replace result with updated hypothesis
@@ -166,7 +169,9 @@ async def evolve_parallel(
     if phi_metrics is not None:
         return sorted(
             results,
-            key=lambda r: r.hypothesis.combined_score(alpha, beta),
+            key=lambda r: r.hypothesis.combined_score(
+                alpha=0.45, beta=0.25, gamma=0.15, delta=0.15
+            ),
             reverse=True
         )
     else:
