@@ -200,3 +200,31 @@ def legal_warmup(output: str, examples_per_domain: int, domains: str, constituti
     )
     count = run_legal_warmup(cfg, local_provider=local, critic_provider=critic)
     click.echo(f"Generated {count} legal preference pairs → {output}")
+
+
+@cli.command("extract-scenarios")
+@click.argument("corpus_path", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), default="spaces/maninagarden/extracted_scenarios.json",
+              show_default=True, help="Output JSON path for extracted scenario templates")
+@click.option("--length", type=int, default=200, help="Scenario trajectory length")
+def extract_scenarios(corpus_path: str, output: str, length: int) -> None:
+    """Extract welfare trajectory patterns from a text corpus.
+
+    Runs the extraction pipeline on CORPUS_PATH, identifies trajectory
+    patterns in construct scores, and saves scenario templates for the forecaster.
+    """
+    import json
+    from src.inference.scenario_extraction import run_extraction_pipeline
+
+    click.echo(f"Extracting scenarios from {corpus_path}...")
+    result = run_extraction_pipeline(corpus_path, scenario_length=length)
+
+    click.echo(f"  Profiles: {len(result['profiles'])}")
+    click.echo(f"  Patterns: {len(result['patterns'])}")
+    click.echo(f"  Scenarios: {len(result['scenarios'])}")
+
+    templates = result["patterns"]
+    with open(output, "w") as f:
+        json.dump(templates, f, indent=2)
+
+    click.echo(f"Saved {len(templates)} scenario templates to {output}")
