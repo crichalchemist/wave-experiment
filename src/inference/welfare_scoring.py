@@ -517,3 +517,114 @@ def compute_gap_urgency(gap: "Gap", phi_metrics: Dict[str, float]) -> float:  # 
     )
 
     return gradient_sum * gap.confidence
+
+
+# ---------------------------------------------------------------------------
+# Layer 2: Forecast-informed trajectory urgency
+# ---------------------------------------------------------------------------
+
+_forecaster_cache = None
+
+
+def _get_forecaster():
+    """Lazy-load PhiTrajectoryForecaster (cached singleton)."""
+    global _forecaster_cache
+    if _forecaster_cache is None:
+        from src.forecasting.phi_trajectory import PhiTrajectoryForecaster
+        _forecaster_cache = PhiTrajectoryForecaster()
+    return _forecaster_cache
+
+
+def _forecast_from_metrics(
+    metrics: Dict[str, float],
+    history_len: int = 200,
+) -> "np.ndarray":
+    """
+    Build a constant-level scenario from current metrics and forecast Phi trajectory.
+
+    Creates a 200-step DataFrame where all construct values are held constant
+    at their current levels (with tiny noise for signal processing stability),
+    then runs the forecaster to predict 10 future Phi values.
+    """
+    import numpy as np
+    import pandas as pd
+    import torch
+
+    forecaster = _get_forecaster()
+    rng = np.random.default_rng(42)
+
+    # Build constant scenario: each construct stays at current level
+    data = {}
+    for c in ALL_CONSTRUCTS:
+        level = max(0.01, min(1.0, metrics.get(c, 0.5)))
+        data[c] = np.full(history_len, level) + rng.normal(0, 0.001, history_len)
+        data[c] = np.clip(data[c], 0.0, 1.0)
+
+    df = pd.DataFrame(data)
+
+    # Compute Phi column (use local compute_phi — does NOT take derivatives)
+    phi_vals = np.array([
+        compute_phi({c: df.at[i, c] for c in ALL_CONSTRUCTS})
+        for i in range(len(df))
+    ])
+    df["phi"] = phi_vals
+
+    # Feature engineering via pipeline
+    X = forecaster.pipeline.fit_transform(df)
+    X_seq = X[np.newaxis, -forecaster.pipeline.seq_len:]  # [1, seq_len, 36]
+    X_tensor = torch.tensor(X_seq, dtype=torch.float32)
+
+    # Predict
+    with torch.no_grad():
+        phi_pred = forecaster.model.predict_phi(X_tensor)
+
+    return phi_pred[0, :, 0].numpy()
+
+
+def _get_trajectory_prediction(metrics: Dict[str, float]) -> "np.ndarray":
+    """Get 10-step Phi trajectory prediction from current metrics."""
+    return _forecast_from_metrics(metrics)
+
+
+def score_hypothesis_trajectory(
+    hypothesis: "Hypothesis",
+    phi_metrics: Dict[str, float],
+) -> float:
+    """
+    Compute trajectory urgency for a hypothesis.
+
+    Runs the Phi forecaster on current construct levels to predict
+    whether welfare is declining. Declining trajectories increase urgency.
+
+    urgency = max(0, -slope) / (max(0, -slope) + k)
+
+    Where slope = (phi[-1] - phi[0]) / len(phi), normalized to [0,1].
+    Rising or stable trajectories -> 0.0 urgency.
+
+    Args:
+        hypothesis: Hypothesis to score (urgency depends on overall welfare state)
+        phi_metrics: Current Phi construct levels
+
+    Returns:
+        Trajectory urgency in [0, 1], where 1.0 = steepest decline
+    """
+    try:
+        predictions = _get_trajectory_prediction(phi_metrics)
+    except Exception as e:
+        logger.debug(f"Trajectory prediction failed: {e}")
+        return 0.0
+
+    if len(predictions) < 2:
+        return 0.0
+
+    slope = (float(predictions[-1]) - float(predictions[0])) / len(predictions)
+
+    # Only declining trajectories create urgency
+    if slope >= 0:
+        return 0.0
+
+    decline = -slope  # positive value
+    k = 0.02  # normalize: decline of 0.02/step -> urgency ~0.5
+    urgency = decline / (decline + k)
+
+    return min(1.0, max(0.0, urgency))
