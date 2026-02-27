@@ -36,6 +36,11 @@ dev = [
     "ruff>=0.0.280",
     "jupyter>=1.0.0",
 ]
+scraping = [
+    "scrapling>=0.3.0",
+    "pdf2image>=1.16.0",
+    "pytesseract>=0.3.10",
+]
 
 [project.scripts]
 detective = "src.cli.main:cli"
