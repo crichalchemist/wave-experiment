@@ -2,6 +2,7 @@
 
 import pytest
 from dataclasses import replace
+from datetime import datetime
 from src.detective.hypothesis import Hypothesis
 
 
@@ -114,3 +115,31 @@ def test_hypothesis_curiosity_surfaces_hunches():
     # hunch: 0.55*0.4 + 0.30*0.3 + 0.15*0.9 = 0.22 + 0.09 + 0.135 = 0.445
     # boring: 0.55*0.6 + 0.30*0.1 + 0.15*0.0 = 0.33 + 0.03 + 0.00  = 0.36
     assert hunch.combined_score() > boring.combined_score()
+
+
+def test_hypothesis_has_trajectory_urgency():
+    h = Hypothesis.create("Test", 0.8)
+    assert h.trajectory_urgency == 0.0
+
+
+def test_trajectory_urgency_validation():
+    with pytest.raises(ValueError, match="trajectory_urgency"):
+        Hypothesis(
+            id="x", text="t", confidence=0.5,
+            timestamp=datetime.now(), trajectory_urgency=-0.1,
+        )
+
+
+def test_combined_score_with_trajectory_urgency():
+    h = Hypothesis.create("Test", 0.8)
+    h = replace(h, welfare_relevance=0.6, curiosity_relevance=0.4, trajectory_urgency=1.0)
+    score = h.combined_score(alpha=0.45, beta=0.25, gamma=0.15, delta=0.15)
+    expected = 0.45 * 0.8 + 0.25 * 0.6 + 0.15 * 0.4 + 0.15 * 1.0
+    assert abs(score - expected) < 1e-9
+
+
+def test_combined_score_backward_compatible():
+    h = Hypothesis.create("Test", 0.8)
+    score_new = h.combined_score(alpha=0.55, beta=0.30, gamma=0.15, delta=0.0)
+    score_old = 0.55 * 0.8 + 0.30 * 0.0 + 0.15 * 0.0
+    assert abs(score_new - score_old) < 1e-9

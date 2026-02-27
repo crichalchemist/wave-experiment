@@ -23,6 +23,8 @@ class Hypothesis:
     curiosity_relevance: float = 0.0  # [0, 1] — how strongly this hypothesis
                                        # sits at the love/truth intersection
 
+    trajectory_urgency: float = 0.0  # [0, 1] — forecast-informed urgency
+
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):
             raise ValueError(
@@ -35,6 +37,10 @@ class Hypothesis:
         if not (0.0 <= self.curiosity_relevance <= 1.0):
             raise ValueError(
                 f"Hypothesis.curiosity_relevance must be in [0.0, 1.0], got {self.curiosity_relevance!r}"
+            )
+        if not (0.0 <= self.trajectory_urgency <= 1.0):
+            raise ValueError(
+                f"Hypothesis.trajectory_urgency must be in [0.0, 1.0], got {self.trajectory_urgency!r}"
             )
 
     @classmethod
@@ -63,21 +69,24 @@ class Hypothesis:
         alpha: float = 0.55,
         beta: float = 0.30,
         gamma: float = 0.15,
+        delta: float = 0.0,
     ) -> float:
         """
         Weighted combination of epistemic confidence, welfare relevance,
-        and curiosity relevance.
+        curiosity relevance, and trajectory urgency.
 
         alpha > beta > gamma ensures epistemic honesty remains primary
         (Constitution Principle 1), while curiosity can surface hunches
         that would otherwise be buried by low confidence.
 
-        Default: alpha=0.55, beta=0.30, gamma=0.15 (sum=1.0).
+        Default: alpha=0.55, beta=0.30, gamma=0.15, delta=0.0 (sum=1.0 when delta=0).
+        Bridge mode: alpha=0.45, beta=0.25, gamma=0.15, delta=0.15 (sum=1.0).
 
         Args:
             alpha: Weight for epistemic confidence
             beta: Weight for welfare relevance
             gamma: Weight for curiosity relevance (love aimed at truth)
+            delta: Weight for trajectory urgency (forecast-informed)
 
         Returns:
             Combined score in [0, 1]
@@ -86,4 +95,5 @@ class Hypothesis:
             alpha * self.confidence
             + beta * self.welfare_relevance
             + gamma * self.curiosity_relevance
+            + delta * self.trajectory_urgency
         )
