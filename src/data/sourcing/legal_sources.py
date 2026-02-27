@@ -16,32 +16,35 @@ except ImportError:
 
 LEGAL_DOMAIN_CONFIGS: dict[str, dict[str, Any]] = {
     "criminal_justice": {
-        "hf_dataset": "pile-of-law/pile-of-law",
-        "hf_config": "r_legaladvice",
+        "hf_dataset": "coastalcph/lex_glue",
+        "hf_config": "scotus",
         "keyword_filters": [
             "sentencing", "plea", "counsel", "miranda",
             "fourth amendment", "excessive force", "bail",
             "prosecutorial discretion", "mandatory minimum",
+            "due process", "criminal", "conviction", "defendant",
         ],
         "description": "Criminal justice: sentencing, policing, rights of the accused",
     },
     "territorial_rights": {
-        "hf_dataset": "pile-of-law/pile-of-law",
-        "hf_config": "r_legaladvice",
+        "hf_dataset": "coastalcph/lex_glue",
+        "hf_config": "scotus",
         "keyword_filters": [
             "territory", "puerto rico", "guam", "tribal",
             "insular", "samoa", "virgin islands",
             "territorial", "commonwealth", "sovereignty",
+            "indian", "reservation", "treaty",
         ],
         "description": "Territorial rights: US territories, tribal nations, Insular Cases",
     },
     "foia_transparency": {
-        "hf_dataset": "pile-of-law/pile-of-law",
-        "hf_config": "r_legaladvice",
+        "hf_dataset": "coastalcph/lex_glue",
+        "hf_config": "scotus",
         "keyword_filters": [
             "foia", "freedom of information", "disclosure",
             "public records", "redact", "exemption",
             "glomar", "transparency", "withhold",
+            "classified", "privilege", "government secrecy",
         ],
         "description": "FOIA/transparency: disclosure mandates vs. systematic denial",
     },
