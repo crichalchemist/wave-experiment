@@ -202,6 +202,48 @@ def legal_warmup(output: str, examples_per_domain: int, domains: str, constituti
     click.echo(f"Generated {count} legal preference pairs → {output}")
 
 
+@cli.command("scrape-foia")
+@click.option("--portal", type=click.Choice(["fbi_vault", "nara", "state_dept"]),
+              required=True, help="FOIA portal to scrape")
+@click.option("--collection", type=str, default=None,
+              help="Specific collection to crawl (e.g., 'jeffrey-epstein')")
+@click.option("--query", type=str, default=None,
+              help="Search query for the portal")
+@click.option("--max-pages", type=int, default=100, help="Maximum pages to crawl")
+@click.option("--output", "-o", type=click.Path(), default="data/foia",
+              help="Output directory for scraped documents")
+@click.option("--ingest/--no-ingest", default=True,
+              help="Run document ingestion (OCR + text extraction) after scraping")
+def scrape_foia(portal, collection, query, max_pages, output, ingest):
+    """Scrape FOIA portal for investigation evidence and training data."""
+    import json
+    from pathlib import Path
+    from src.data.sourcing.foia_scraper import FOIAScraper
+
+    scraper = FOIAScraper(portal=portal, output_dir=output)
+
+    click.echo(f"Crawling {portal}...")
+    documents = scraper.crawl(collection=collection, query=query, max_pages=max_pages)
+    click.echo(f"Found {len(documents)} documents")
+
+    if ingest and documents:
+        click.echo("Downloading and ingesting documents...")
+        documents = scraper.download_and_ingest(documents)
+        with_text = [d for d in documents if d.text]
+        click.echo(f"Ingested {len(with_text)} documents with extracted text")
+
+    # Save document index
+    index_path = Path(output) / portal / "index.json"
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(index_path, "w") as f:
+        json.dump([
+            {"title": d.title, "url": d.url, "collection": d.collection,
+             "has_text": bool(d.text), "date": d.date}
+            for d in documents
+        ], f, indent=2)
+    click.echo(f"Saved document index to {index_path}")
+
+
 @cli.command("extract-scenarios")
 @click.argument("corpus_path", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default="spaces/maninagarden/extracted_scenarios.json",
