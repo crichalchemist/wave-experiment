@@ -48,6 +48,10 @@ detective = "src.cli.main:cli"
 [tool.pytest.ini_options]
 pythonpath = [".", "Dignity-Model"]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
