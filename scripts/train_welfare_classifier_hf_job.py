@@ -361,6 +361,7 @@ def launch_classifier_training(
             flavor=hardware,
             token=token,
             timeout=timeout,
+            secrets={"HF_TOKEN": token},
         )
         job_id = getattr(job, "job_id", str(job))
         message = (
