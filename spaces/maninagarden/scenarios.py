@@ -8,6 +8,8 @@ so the v2.1 recovery-aware floor logic activates during data generation.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
@@ -230,3 +232,69 @@ def build_reference_scaler(seed=42):
     scaler = RobustScaler()
     scaler.fit(features_ref.values)
     return scaler, list(features_ref.columns)
+
+
+# ============================================================================
+# Extracted scenario support (Layer 3 bridge)
+# ============================================================================
+
+EXTRACTED_SCENARIOS_PATH = Path(__file__).parent / "extracted_scenarios.json"
+
+
+def load_extracted_scenarios() -> dict:
+    """Load extracted scenario templates from JSON file.
+
+    Returns dict mapping scenario_name -> description string.
+    Returns empty dict if no extracted scenarios exist yet.
+    """
+    import json
+    if not EXTRACTED_SCENARIOS_PATH.exists():
+        return {}
+    try:
+        with open(EXTRACTED_SCENARIOS_PATH) as f:
+            templates = json.load(f)
+        return {t["label"]: t.get("description", f"Extracted: {t['label']}") for t in templates}
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
+def generate_extracted_scenario(label, length=200, rng=None):
+    """Generate trajectory from an extracted scenario template."""
+    import json
+    if not EXTRACTED_SCENARIOS_PATH.exists():
+        raise ValueError("No extracted scenarios available")
+
+    with open(EXTRACTED_SCENARIOS_PATH) as f:
+        templates = json.load(f)
+
+    template = next((t for t in templates if t["label"] == label), None)
+    if template is None:
+        raise ValueError(f"Unknown extracted scenario: {label}")
+
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    data = {}
+    for c in ALL_CONSTRUCTS:
+        start = template["start_levels"].get(c, 0.5)
+        end = template["end_levels"].get(c, 0.5)
+        noise_scale = max(0.005, abs(end - start) * 0.05)
+        data[c] = np.linspace(start, end, length) + rng.normal(0, noise_scale, length)
+        data[c] = np.clip(data[c], 0.0, 1.0)
+
+    df = pd.DataFrame(data)
+
+    n = len(df)
+    phi_vals = np.empty(n, dtype=np.float64)
+    prev_metrics = None
+    for idx in range(n):
+        metrics = {c: df.at[idx, c] for c in ALL_CONSTRUCTS}
+        if idx == 0 or prev_metrics is None:
+            derivs = {}
+        else:
+            derivs = {c: metrics[c] - prev_metrics[c] for c in ALL_CONSTRUCTS}
+        phi_vals[idx] = compute_phi(metrics, derivatives=derivs)
+        prev_metrics = metrics
+
+    df["phi"] = phi_vals
+    return df
