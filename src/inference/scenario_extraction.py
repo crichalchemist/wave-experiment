@@ -156,3 +156,44 @@ def generate_from_template(
     ])
     df["phi"] = phi_vals
     return df
+
+
+def run_extraction_pipeline(
+    corpus_path: str,
+    scenario_length: int = 200,
+    seed: int = 42,
+) -> Dict:
+    """
+    End-to-end: corpus file → construct profiles → trajectory patterns → synthetic scenarios.
+
+    Args:
+        corpus_path: Path to text corpus file.
+        scenario_length: Length of generated scenarios.
+        seed: Random seed.
+
+    Returns:
+        Dict with keys: profiles, patterns, scenarios (list of (label, DataFrame) tuples).
+    """
+    from pathlib import Path
+
+    text = Path(corpus_path).read_text(encoding="utf-8", errors="replace")
+    logger.info(f"Loaded corpus: {len(text)} chars, ~{len(text.split())} words")
+
+    profiles = extract_construct_profiles(text)
+    logger.info(f"Extracted {len(profiles)} construct profiles")
+
+    patterns = identify_trajectory_patterns(profiles)
+    logger.info(f"Identified {len(patterns)} trajectory patterns")
+
+    rng = np.random.default_rng(seed)
+    scenarios = []
+    for pattern in patterns:
+        df = generate_from_template(pattern, length=scenario_length, rng=rng)
+        scenarios.append((pattern["label"], df))
+    logger.info(f"Generated {len(scenarios)} synthetic scenarios")
+
+    return {
+        "profiles": profiles,
+        "patterns": patterns,
+        "scenarios": scenarios,
+    }

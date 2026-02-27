@@ -161,3 +161,29 @@ def test_generate_from_template_values_clipped():
     for c in ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]:
         assert df[c].min() >= 0.0
         assert df[c].max() <= 1.0
+
+
+def test_run_extraction_pipeline():
+    from src.inference.scenario_extraction import run_extraction_pipeline
+    from unittest.mock import patch
+    import tempfile, os
+
+    corpus = "Resource allocation suffered as community bonds weakened. " * 200
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        f.write(corpus)
+        corpus_path = f.name
+
+    try:
+        mock_scores = {"c": 0.7, "kappa": 0.3, "j": 0.4, "p": 0.5,
+                       "eps": 0.2, "lam_L": 0.3, "lam_P": 0.3, "xi": 0.5}
+        with patch("src.inference.scenario_extraction.get_construct_scores", return_value=mock_scores):
+            result = run_extraction_pipeline(corpus_path)
+
+        assert "profiles" in result
+        assert "patterns" in result
+        assert "scenarios" in result
+        assert isinstance(result["profiles"], list)
+        assert isinstance(result["patterns"], list)
+        assert isinstance(result["scenarios"], list)
+    finally:
+        os.unlink(corpus_path)
