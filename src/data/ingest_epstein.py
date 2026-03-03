@@ -2,6 +2,9 @@
 
 Reads page-level entity co-occurrences and document-level role associations,
 creating CO_MENTIONED and ASSOCIATED edges in the knowledge graph.
+
+When the backend is KuzuGraph, edges are collected in memory and flushed in
+bulk for dramatically faster ingestion.
 """
 
 from __future__ import annotations
@@ -23,6 +26,9 @@ from src.data.graph_store import GraphStore
 
 logger = logging.getLogger(__name__)
 
+# Flush every N edges to bound memory during bulk ingestion
+_BULK_FLUSH_SIZE: int = 5_000
+
 
 @dataclass(frozen=True)
 class IngestionStats:
@@ -32,6 +38,18 @@ class IngestionStats:
     entities_added: int
     edges_created: int
     skipped: int
+
+
+def _has_bulk(graph: GraphStore) -> bool:
+    """Check if the graph backend supports bulk_add_edges."""
+    return hasattr(graph, "bulk_add_edges") and callable(graph.bulk_add_edges)
+
+
+def _flush_bulk(graph: GraphStore, buffer: list[tuple[str, str, RelationType, float]]) -> None:
+    """Flush the edge buffer via bulk_add_edges if available."""
+    if buffer and _has_bulk(graph):
+        graph.bulk_add_edges(buffer)  # type: ignore[attr-defined]
+        buffer.clear()
 
 
 def ingest_epstein(
@@ -49,11 +67,17 @@ def ingest_epstein(
        all key-person pairs (confidence 0.8).
     4. Skip pages with empty full_text or no people.
 
+    When the graph backend supports ``bulk_add_edges`` (e.g. KuzuGraph),
+    edges are buffered and flushed in batches for faster ingestion.
+
     Returns an :class:`IngestionStats` summary.
     """
     mappings = load_dedupe_mappings(root)
     people_map = mappings.get("people", {})
     analyses = load_analyses(root)
+
+    use_bulk = _has_bulk(graph)
+    edge_buffer: list[tuple[str, str, RelationType, float]] = []
 
     entities_seen: set[str] = set()
     edges_created = 0
@@ -76,31 +100,21 @@ def ingest_epstein(
 
         # Person-person co-mention edges (all unique pairs)
         for a, b in combinations(sorted(p for p in set(page.people) if p), 2):
-            graph.add_edge(a, b, RelationType.CO_MENTIONED, confidence=0.5)
-            graph.add_edge(b, a, RelationType.CO_MENTIONED, confidence=0.5)
+            if use_bulk:
+                edge_buffer.append((a, b, RelationType.CO_MENTIONED, 0.5))
+                edge_buffer.append((b, a, RelationType.CO_MENTIONED, 0.5))
+            else:
+                graph.add_edge(a, b, RelationType.CO_MENTIONED, confidence=0.5)
+                graph.add_edge(b, a, RelationType.CO_MENTIONED, confidence=0.5)
             edges_created += 2
 
+        if use_bulk and len(edge_buffer) >= _BULK_FLUSH_SIZE:
+            _flush_bulk(graph, edge_buffer)
+
+    # Flush remaining page edges
+    _flush_bulk(graph, edge_buffer)
+
     # --- Phase 2: analysis-level role associations ---
-    _ingest_analysis_edges(analyses, people_map, graph, entities_seen)
-    # Count edges from analyses separately
-    analysis_edges = _count_analysis_edges(analyses, people_map)
-    edges_created += analysis_edges
-
-    return IngestionStats(
-        pages_processed=pages_processed,
-        entities_added=len(entities_seen),
-        edges_created=edges_created,
-        skipped=skipped,
-    )
-
-
-def _ingest_analysis_edges(
-    analyses: dict[str, EpsteinAnalysis],
-    people_map: dict[str, str],
-    graph: GraphStore,
-    entities_seen: set[str],
-) -> None:
-    """Create ASSOCIATED edges between key people in each analysis."""
     for analysis in analyses.values():
         if len(analysis.key_people) < 2:
             continue
@@ -110,20 +124,20 @@ def _ingest_analysis_edges(
         entities_seen.update(unique_names)
 
         for a, b in combinations(unique_names, 2):
-            graph.add_edge(a, b, RelationType.ASSOCIATED, confidence=0.8)
-            graph.add_edge(b, a, RelationType.ASSOCIATED, confidence=0.8)
+            if use_bulk:
+                edge_buffer.append((a, b, RelationType.ASSOCIATED, 0.8))
+                edge_buffer.append((b, a, RelationType.ASSOCIATED, 0.8))
+            else:
+                graph.add_edge(a, b, RelationType.ASSOCIATED, confidence=0.8)
+                graph.add_edge(b, a, RelationType.ASSOCIATED, confidence=0.8)
+            edges_created += 2
 
+    # Final flush
+    _flush_bulk(graph, edge_buffer)
 
-def _count_analysis_edges(
-    analyses: dict[str, EpsteinAnalysis],
-    people_map: dict[str, str],
-) -> int:
-    """Count edges that would be created from analyses (for stats)."""
-    total = 0
-    for analysis in analyses.values():
-        if len(analysis.key_people) < 2:
-            continue
-        names = [normalize(name, people_map) for name, _role in analysis.key_people]
-        n = len(set(n for n in names if n))
-        total += n * (n - 1)  # bidirectional pairs
-    return total
+    return IngestionStats(
+        pages_processed=pages_processed,
+        entities_added=len(entities_seen),
+        edges_created=edges_created,
+        skipped=skipped,
+    )
