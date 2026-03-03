@@ -90,15 +90,17 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 **Hybrid provider routing (ADR-013)** — `HybridRoutingProvider` in `src/core/providers.py` inspects prompt text via `classify_prompt()` to route scoring calls (modules A/B/C, evolution, graph — "Reply with ONLY: score:") to a local vLLM CPU instance (DeepSeek-R1-Distill-Qwen-1.5B via Docker, chain-of-thought reasoning before scoring) and reasoning calls to Azure Foundry. Circuit-breaker: if vLLM fails, all calls fall back to Azure until `reset_fallback()`. Set `DETECTIVE_PROVIDER=hybrid` to activate; `VLLM_SCORING_URL`/`VLLM_SCORING_MODEL` override defaults. No call-site changes required.
 
+**Reasoning trace capture (ADR-014)** — `ReasoningTrace` frozen dataclass captures chain-of-thought from scoring calls. `TraceStore` persists to JSONL, keeps a bounded deque (500), and pushes to SSE subscribers. Wired into `HybridRoutingProvider._trace_store` as a zero-call-site-change side-effect. API endpoints: `GET /traces/recent`, `/traces/history`, `/traces/stream` (SSE). Frontend at `crichalchemist.com/reasoning`. Set `DETECTIVE_TRACE_PATH` to enable.
+
 ### Implementation status
 
-**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi v2.1 formula, recovery floors, derivatives, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/data/sourcing/` (foia_scraper.py, dual_pipeline.py, legal_sources.py — FOIA + legal source ingestion), `src/security/constitution.py` (epistemic moral compass client), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry, Ollama, hybrid routing providers — ADR-013), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py` (includes `extract-scenarios` command). Full test suite: 550+ tests passing.
+**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi v2.1 formula, recovery floors, derivatives, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/data/sourcing/` (foia_scraper.py, dual_pipeline.py, legal_sources.py — FOIA + legal source ingestion), `src/security/constitution.py` (epistemic moral compass client), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry, Ollama, hybrid routing providers — ADR-013), `src/core/reasoning_trace.py` + `src/core/trace_store.py` (reasoning trace capture — ADR-014), `src/api/routes.py` (FastAPI endpoints + trace streaming), `src/cli/main.py` (includes `extract-scenarios` command). Full test suite: 590+ tests passing.
 
 **Stubs:** `src/training/constitutional_warmup.py`, multi-task loss integration, document ingestion pipeline.
 
 **Design docs:** `docs/plans/` contains implementation plans and design docs. `docs/humanity-phi-formalized.md` is the welfare function paper. `docs/constitution.md` is the epistemic moral compass.
 
-**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-013). Consult before making changes to the systems they cover.
+**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-014). Consult before making changes to the systems they cover.
 
 ### Data layout (planned)
 
