@@ -18,11 +18,12 @@ from welfare import (
 )
 from model import load_model, list_checkpoint_versions, load_training_metadata, SEQ_LEN, PRED_LEN, MODEL_REPO
 from scenarios import (
-    generate_scenario, compute_all_signals, build_reference_scaler,
-    SCENARIOS, SCENARIO_DESCRIPTIONS,
+    generate_scenario, compute_all_signals, compute_all_signals_with_graph,
+    build_reference_scaler, SCENARIOS, SCENARIO_DESCRIPTIONS,
 )
 from training import get_training_script, launch_training_job, HARDWARE_OPTIONS
 from graph_client import fetch_graph, invalidate_cache
+from graph_features import extract_graph_features, GRAPH_FEATURE_NAMES
 from graph_analytics import (
     detect_communities, compute_centrality, compute_degree,
     compute_clustering, ego_subgraph, BACKEND as GRAPH_BACKEND,
@@ -42,6 +43,17 @@ print("Building reference scaler...")
 REFERENCE_SCALER, FEATURE_NAMES = build_reference_scaler()
 print(f"Scaler ready: {len(FEATURE_NAMES)} features")
 
+# Build extended scaler (36 base + 7 graph zeros) for 43-feature models
+_zero_graph = {k: 0.0 for k in GRAPH_FEATURE_NAMES}
+_ref_rng = np.random.default_rng(42)
+_ref_df = generate_scenario("stable_community", length=200, rng=_ref_rng)
+_ref_extended = compute_all_signals_with_graph(_ref_df, _zero_graph, window=20)
+from sklearn.preprocessing import RobustScaler
+REFERENCE_SCALER_GRAPH = RobustScaler()
+REFERENCE_SCALER_GRAPH.fit(_ref_extended.values)
+FEATURE_NAMES_GRAPH = list(_ref_extended.columns)
+print(f"Extended scaler ready: {len(FEATURE_NAMES_GRAPH)} features")
+
 CONSTRUCT_COLORS = [
     "#E91E63", "#9C27B0", "#FF9800", "#4CAF50",
     "#00BCD4", "#F44336", "#3F51B5", "#795548",
@@ -52,17 +64,30 @@ CONSTRUCT_COLORS = [
 # Inference pipeline
 # ============================================================================
 
-def _run_inference_core(df, model=None):
+def _run_inference_core(df, model=None, graph_features=None):
     """Core inference: DataFrame -> (phi_pred, construct_pred, attention).
 
     Undecorated so it can be called from within other @spaces.GPU functions
     (ZeroGPU decorators cannot nest).
+
+    When graph_features is provided and the model expects 43 inputs, uses
+    the extended feature pipeline. Otherwise falls back to the 36-feature
+    base pipeline (backward compatible).
     """
     if model is None:
         model = MODEL
     device = next(model.parameters()).device
-    features = compute_all_signals(df, window=20)
-    X_scaled = REFERENCE_SCALER.transform(features[FEATURE_NAMES].values)
+
+    # Detect model input width from CNN first layer
+    model_input_size = model.cnn.net[0].in_channels
+
+    if graph_features and model_input_size == 43:
+        features = compute_all_signals_with_graph(df, graph_features, window=20)
+        X_scaled = REFERENCE_SCALER_GRAPH.transform(features[FEATURE_NAMES_GRAPH].values)
+    else:
+        features = compute_all_signals(df, window=20)
+        X_scaled = REFERENCE_SCALER.transform(features[FEATURE_NAMES].values)
+
     X_window = X_scaled[-SEQ_LEN:]
     X_tensor = torch.tensor(X_window[np.newaxis], dtype=torch.float32).to(device)
 
@@ -77,9 +102,9 @@ def _run_inference_core(df, model=None):
 
 
 @spaces.GPU(duration=30)
-def run_inference(df, model=None):
+def run_inference(df, model=None, graph_features=None):
     """GPU-accelerated inference: DataFrame -> (phi_pred, construct_pred, attention)."""
-    return _run_inference_core(df, model=model)
+    return _run_inference_core(df, model=model, graph_features=graph_features)
 
 
 # ============================================================================

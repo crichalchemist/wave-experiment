@@ -96,6 +96,21 @@ def compute_all_signals(df, window=20):
     return out
 
 
+def compute_all_signals_with_graph(df, graph_features: dict[str, float], window=20):
+    """Compute 43 features: 36 existing + 7 graph topology.
+
+    Graph features are static per trajectory (not time-varying) since graph
+    topology doesn't change per timestep. They're broadcast as constant
+    columns. The model's attention mechanism learns whether to attend to them.
+    """
+    from graph_features import GRAPH_FEATURE_NAMES
+
+    features = compute_all_signals(df, window)
+    for key in GRAPH_FEATURE_NAMES:
+        features[key] = graph_features.get(key, 0.0)
+    return features
+
+
 # ============================================================================
 # Scenario definitions
 # ============================================================================
