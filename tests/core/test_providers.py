@@ -264,7 +264,7 @@ def test_provider_from_env_returns_hybrid(monkeypatch) -> None:
     assert isinstance(p.scoring_provider, VLLMProvider)
     assert isinstance(p.reasoning_provider, AzureFoundryProvider)
     assert p.scoring_provider.base_url == "http://localhost:8100/v1"
-    assert p.scoring_provider.model == "Qwen/Qwen2.5-0.5B-Instruct"
+    assert p.scoring_provider.model == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
 
 def test_provider_from_env_hybrid_custom_scoring(monkeypatch) -> None:

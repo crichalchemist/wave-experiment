@@ -229,7 +229,7 @@ def provider_from_env() -> ModelProvider:
     elif provider_type == _PROVIDER_HYBRID:
         # Scoring → local vLLM (small model), reasoning → Azure Foundry
         scoring_url = os.environ.get(_ENV_VLLM_SCORING_URL, "http://localhost:8100/v1")
-        scoring_model = os.environ.get(_ENV_VLLM_SCORING_MODEL, "Qwen/Qwen2.5-0.5B-Instruct")
+        scoring_model = os.environ.get(_ENV_VLLM_SCORING_MODEL, "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
         scoring = VLLMProvider(base_url=scoring_url, model=scoring_model)
         azure_endpoint = os.environ[_ENV_AZURE_ENDPOINT]
         azure_key = os.environ[_ENV_AZURE_KEY]
