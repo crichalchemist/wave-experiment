@@ -329,3 +329,77 @@ def test_confidence_increases_with_more_steps():
     result_one = verify_inline(intent, chain_one, provider_one, constitution)
 
     assert result_many.confidence >= result_one.confidence
+
+
+# ---------------------------------------------------------------------------
+# 8. welfare scoring integration in analyze()
+# ---------------------------------------------------------------------------
+
+def test_analyze_includes_welfare_scoring():
+    """analyze() should compute welfare_relevance when phi_metrics provided."""
+    from src.inference.pipeline import analyze
+    from unittest.mock import patch
+
+    provider = MockProvider(response="Step one.\nStep two.\nFinal verdict.")
+    graph = InMemoryGraph()
+    graph.add_edge("EntityA", "PolicyX", RelationType.CAUSAL, confidence=0.9)
+    constitution = _MockConstitution()
+
+    # Force keyword fallback for deterministic construct inference
+    with patch(
+        'src.inference.welfare_classifier.get_construct_scores',
+        side_effect=FileNotFoundError("mocked out"),
+    ):
+        result = analyze(
+            claim="Resource allocation gap in poverty-stricken region",
+            provider=provider,
+            graph=graph,
+            library=EMPTY_LIBRARY,
+            constitution=constitution,
+            phi_metrics={"c": 0.1, "kappa": 0.5, "j": 0.5, "p": 0.5,
+                         "eps": 0.5, "lam_L": 0.5, "lam_P": 0.5, "xi": 0.5},
+        )
+
+    assert result.welfare_relevance > 0.0  # "resource" triggers care construct
+    assert "c" in result.threatened_constructs
+
+
+def test_analyze_welfare_relevance_zero_without_phi_metrics():
+    """analyze() without phi_metrics has welfare_relevance=0.0."""
+    from src.inference.pipeline import analyze
+
+    provider = MockProvider(response="Verdict: confirmed.")
+    graph = InMemoryGraph()
+    constitution = _MockConstitution()
+
+    result = analyze(
+        claim="Some claim",
+        provider=provider,
+        graph=graph,
+        library=EMPTY_LIBRARY,
+        constitution=constitution,
+    )
+
+    assert result.welfare_relevance == 0.0
+    assert result.threatened_constructs == ()
+
+
+def test_analyze_backward_compatible_without_phi_metrics():
+    """analyze() works exactly as before when phi_metrics not provided."""
+    from src.inference.pipeline import analyze, AnalysisResult
+
+    provider = MockProvider(response="Analysis complete.\nConclusion: valid.")
+    graph = InMemoryGraph()
+    graph.add_edge("EntityA", "PolicyX", RelationType.SEQUENTIAL, confidence=0.8)
+    constitution = _MockConstitution()
+
+    result = analyze(
+        claim="EntityA influenced PolicyX",
+        provider=provider,
+        graph=graph,
+        library=EMPTY_LIBRARY,
+        constitution=constitution,
+    )
+
+    assert isinstance(result, AnalysisResult)
+    assert result.welfare_relevance == 0.0

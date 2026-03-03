@@ -99,6 +99,8 @@ class AnalysisResult:
     reasoning: ReasoningChain
     verdict: str
     confidence: float
+    welfare_relevance: float = 0.0
+    threatened_constructs: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -363,9 +365,13 @@ def analyze(
     graph: GraphStore,
     library: ExperienceLibrary,
     constitution: object,
+    phi_metrics: dict[str, float] | None = None,
 ) -> AnalysisResult:
     """
     Run the full 4-layer analytical pipeline.
+
+    When phi_metrics is provided, computes welfare relevance of the claim
+    by identifying threatened constructs and scoring their Phi gradients.
 
     library is accepted per spec for future enrichment of Layer 2 retrieval
     (e.g. retrieving similar past hypotheses to weight evidence).
@@ -375,4 +381,30 @@ def analyze(
     intent = parse_intent(claim)
     evidence = retrieve_evidence(intent, graph)
     chain = fuse_reasoning(evidence, provider)
-    return verify_inline(intent, chain, provider, constitution, evidence=tuple(evidence))
+    result = verify_inline(intent, chain, provider, constitution, evidence=tuple(evidence))
+
+    # Welfare scoring when phi_metrics provided
+    if phi_metrics is not None:
+        from src.inference.welfare_scoring import (
+            infer_threatened_constructs as _infer,
+            score_hypothesis_welfare as _score_welfare,
+        )
+        from src.detective.hypothesis import Hypothesis
+        from dataclasses import replace
+
+        constructs = _infer(claim)
+        if constructs:
+            # Create a temporary hypothesis to use the scoring infrastructure
+            temp_h = Hypothesis.create(text=claim, confidence=result.confidence)
+            temp_h = replace(temp_h, threatened_constructs=constructs)
+            welfare_rel = _score_welfare(temp_h, phi_metrics)
+        else:
+            welfare_rel = 0.0
+
+        result = replace(
+            result,
+            welfare_relevance=welfare_rel,
+            threatened_constructs=constructs,
+        )
+
+    return result

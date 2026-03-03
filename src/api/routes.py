@@ -145,6 +145,7 @@ def create_app(
             graph=_graph,
             library=EMPTY_LIBRARY,
             constitution=constitution,
+            phi_metrics=request.phi_metrics,
         )
 
         return AnalyzeResponse(
