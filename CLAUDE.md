@@ -88,15 +88,17 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 - Layer 3: Scenario extraction — real text → construct profiles → trajectory patterns → synthetic training scenarios for forecaster (ADR-011)
 - Data flywheel: detective findings enrich forecaster training data, forecaster predictions inform detective prioritization
 
+**Hybrid provider routing (ADR-013)** — `HybridRoutingProvider` in `src/core/providers.py` inspects prompt text via `classify_prompt()` to route scoring calls (modules A/B/C, evolution, graph — "Reply with ONLY: score:") to local Ollama (qwen2.5:0.5b, 30s timeout) and reasoning calls to Azure Foundry. Circuit-breaker: if Ollama fails, all calls fall back to Azure until `reset_fallback()`. Set `DETECTIVE_PROVIDER=hybrid` to activate. No call-site changes required.
+
 ### Implementation status
 
-**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi v2.1 formula, recovery floors, derivatives, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/data/sourcing/` (foia_scraper.py, dual_pipeline.py, legal_sources.py — FOIA + legal source ingestion), `src/security/constitution.py` (epistemic moral compass client), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry provider), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py` (includes `extract-scenarios` command). Full test suite: 564+ tests passing.
+**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi v2.1 formula, recovery floors, derivatives, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/data/sourcing/` (foia_scraper.py, dual_pipeline.py, legal_sources.py — FOIA + legal source ingestion), `src/security/constitution.py` (epistemic moral compass client), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry, Ollama, hybrid routing providers — ADR-013), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py` (includes `extract-scenarios` command). Full test suite: 550+ tests passing.
 
 **Stubs:** `src/training/constitutional_warmup.py`, multi-task loss integration, document ingestion pipeline.
 
 **Design docs:** `docs/plans/` contains implementation plans and design docs. `docs/humanity-phi-formalized.md` is the welfare function paper. `docs/constitution.md` is the epistemic moral compass.
 
-**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-012). Consult before making changes to the systems they cover.
+**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-013). Consult before making changes to the systems they cover.
 
 ### Data layout (planned)
 
