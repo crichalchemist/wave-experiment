@@ -10,11 +10,21 @@ The LLM scorer is injected (ModelProvider) so it works without a live model in t
 from __future__ import annotations
 
 import sys
+import warnings
 
 try:
     import torch
+
+    # Suppress upstream deprecation warnings from torch_geometric internals:
+    # - torch_geometric.distributed (deprecated in 2.7.0, imported transitively)
+    # - torch.jit.script (used by torch_geometric.nn.pool for TypedDict JIT)
+    # Neither API is used by our code; these fire on import of GATv2Conv.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r".*torch_geometric\.distributed.*deprecated")
+        warnings.filterwarnings("ignore", message=r".*torch\.jit\.script.*deprecated")
+        from torch_geometric.nn import GATv2Conv
+
     import torch.nn as nn
-    from torch_geometric.nn import GATv2Conv
 except ImportError:
     _current = sys.modules.get(__name__)
     if getattr(_current, "torch", None) is None:
