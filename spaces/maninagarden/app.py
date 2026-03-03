@@ -22,6 +22,12 @@ from scenarios import (
     SCENARIOS, SCENARIO_DESCRIPTIONS,
 )
 from training import get_training_script, launch_training_job, HARDWARE_OPTIONS
+from graph_client import fetch_graph, invalidate_cache
+from graph_analytics import (
+    detect_communities, compute_centrality, compute_degree,
+    compute_clustering, ego_subgraph, BACKEND as GRAPH_BACKEND,
+)
+import networkx as nx
 
 # ============================================================================
 # Startup
@@ -326,6 +332,194 @@ def compare_experiments(scenario, seed, revision_a, revision_b):
 
 
 # ============================================================================
+# Entity Network handlers
+# ============================================================================
+
+# Community colors for network visualization (up to 20 communities)
+_COMMUNITY_COLORS = [
+    "#E91E63", "#2196F3", "#4CAF50", "#FF9800", "#9C27B0",
+    "#00BCD4", "#F44336", "#8BC34A", "#FF5722", "#3F51B5",
+    "#CDDC39", "#795548", "#009688", "#FFC107", "#673AB7",
+    "#03A9F4", "#FFEB3B", "#607D8B", "#E040FB", "#76FF03",
+]
+
+
+def _make_network_plot(nodes, edges, communities, centrality, title):
+    """Build Plotly force-directed network visualization."""
+    if not nodes:
+        fig = go.Figure()
+        fig.update_layout(title=title, template="plotly_white", height=600)
+        fig.add_annotation(text="No graph data available", showarrow=False,
+                           xref="paper", yref="paper", x=0.5, y=0.5, font_size=16)
+        return fig
+
+    # Build networkx graph for layout computation
+    G = nx.DiGraph()
+    G.add_nodes_from(nodes)
+    for e in edges:
+        G.add_edge(e["source"], e["target"])
+
+    # Force-directed layout: k scales with graph size for readability
+    k = 1.0 / max(1, len(nodes) ** 0.5)
+    pos = nx.spring_layout(G, k=k, iterations=50, seed=42)
+
+    # Edge traces
+    edge_x, edge_y = [], []
+    for e in edges:
+        if e["source"] in pos and e["target"] in pos:
+            x0, y0 = pos[e["source"]]
+            x1, y1 = pos[e["target"]]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=edge_x, y=edge_y, mode="lines",
+        line=dict(width=0.5, color="#ccc"),
+        hoverinfo="none", showlegend=False,
+    ))
+
+    # Node traces: one per community for legend grouping
+    max_pr = max(centrality.values()) if centrality else 1.0
+    community_ids = sorted(set(communities.values())) if communities else [0]
+
+    for comm_id in community_ids:
+        comm_nodes = [n for n in nodes if communities.get(n, 0) == comm_id]
+        if not comm_nodes:
+            continue
+        color = _COMMUNITY_COLORS[comm_id % len(_COMMUNITY_COLORS)]
+        nx_list = [pos[n][0] for n in comm_nodes if n in pos]
+        ny_list = [pos[n][1] for n in comm_nodes if n in pos]
+        sizes = [
+            max(6, 30 * (centrality.get(n, 0.0) / max(max_pr, 1e-9)))
+            for n in comm_nodes if n in pos
+        ]
+        labels = [n for n in comm_nodes if n in pos]
+        hover = [
+            f"{n}<br>PageRank: {centrality.get(n, 0):.4f}<br>Community: {comm_id}"
+            for n in comm_nodes if n in pos
+        ]
+
+        fig.add_trace(go.Scatter(
+            x=nx_list, y=ny_list, mode="markers",
+            marker=dict(size=sizes, color=color, line=dict(width=0.5, color="#333")),
+            text=labels, hovertext=hover, hoverinfo="text",
+            name=f"Community {comm_id}", legendgroup=f"c{comm_id}",
+        ))
+
+    fig.update_layout(
+        title=title, showlegend=True, template="plotly_white", height=600,
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+    )
+    return fig
+
+
+def network_overview(key):
+    """Fetch graph, run analytics, render overview."""
+    expected = os.environ.get("ADMIN_KEY", "")
+    if key != expected or not expected:
+        return None, "Not authenticated."
+
+    data = fetch_graph()
+    nodes, edges = data["nodes"], data["edges"]
+
+    if not nodes:
+        fig = go.Figure()
+        fig.add_annotation(text="No graph data — is the detective API running?",
+                           showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5)
+        fig.update_layout(template="plotly_white", height=600)
+        return fig, "No graph data available."
+
+    communities = detect_communities(nodes, edges)
+    centrality = compute_centrality(nodes, edges)
+
+    fig = _make_network_plot(
+        nodes, edges, communities, centrality,
+        f"Entity Network ({len(nodes)} nodes, {len(edges)} edges)",
+    )
+
+    # Stats sidebar
+    n_communities = len(set(communities.values())) if communities else 0
+    top_10 = sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_lines = "\n".join(
+        f"| {name} | {score:.4f} |" for name, score in top_10
+    )
+    stats = (
+        f"**Backend:** {GRAPH_BACKEND}\n\n"
+        f"**Nodes:** {len(nodes)} | **Edges:** {len(edges)} | "
+        f"**Communities:** {n_communities}\n\n"
+        f"### Top 10 by PageRank\n\n"
+        f"| Entity | PageRank |\n|--------|----------|\n{top_lines}"
+    )
+    return fig, stats
+
+
+def network_explore(key, entity, hops):
+    """Ego-subgraph exploration for a specific entity."""
+    expected = os.environ.get("ADMIN_KEY", "")
+    if key != expected or not expected:
+        return None, "Not authenticated."
+
+    if not entity or not entity.strip():
+        return None, "Enter an entity name to explore."
+
+    data = fetch_graph()
+    nodes, edges = data["nodes"], data["edges"]
+
+    if not nodes:
+        return None, "No graph data available."
+
+    ego = ego_subgraph(nodes, edges, center=entity.strip(), hops=int(hops))
+    if not ego["nodes"]:
+        return None, f"Entity **{entity}** not found in the graph."
+
+    # Compute analytics on full graph for context
+    communities = detect_communities(nodes, edges)
+    centrality = compute_centrality(nodes, edges)
+    degrees = compute_degree(nodes, edges)
+    clustering = compute_clustering(nodes, edges)
+
+    fig = _make_network_plot(
+        ego["nodes"], ego["edges"], communities, centrality,
+        f"{entity} — {int(hops)}-hop neighbourhood ({len(ego['nodes'])} nodes)",
+    )
+
+    # Entity details
+    entity_clean = entity.strip()
+    pr_rank = sorted(centrality.keys(), key=lambda n: centrality.get(n, 0), reverse=True)
+    rank = pr_rank.index(entity_clean) + 1 if entity_clean in pr_rank else "?"
+
+    # Direct connections
+    direct = [e for e in edges if e["source"] == entity_clean or e["target"] == entity_clean]
+    conn_lines = "\n".join(
+        f"| {e['source']} | {e['target']} | {e['relation']} | {e['confidence']:.2f} |"
+        for e in direct[:20]
+    )
+
+    details = (
+        f"### {entity_clean}\n\n"
+        f"**Degree:** {degrees.get(entity_clean, 0)} | "
+        f"**PageRank:** {centrality.get(entity_clean, 0):.4f} (rank #{rank}) | "
+        f"**Community:** {communities.get(entity_clean, '?')} | "
+        f"**Clustering:** {clustering.get(entity_clean, 0):.3f}\n\n"
+        f"### Direct Connections (up to 20)\n\n"
+        f"| Source | Target | Relation | Confidence |\n"
+        f"|--------|--------|----------|------------|\n{conn_lines}"
+    )
+    return fig, details
+
+
+def refresh_graph_cache():
+    """Invalidate cache and re-fetch."""
+    invalidate_cache()
+    data = fetch_graph()
+    n = data["stats"]["node_count"]
+    e = data["stats"]["edge_count"]
+    return f"Cache refreshed. {n} nodes, {e} edges."
+
+
+# ============================================================================
 # Gradio UI
 # ============================================================================
 
@@ -468,6 +662,49 @@ with gr.Blocks(
             dw_btn.click(
                 fn=inspect_data, inputs=[dw_key, dw_scenario, dw_seed],
                 outputs=[dw_raw, dw_heat, dw_phi, dw_stats],
+            )
+
+        # ==================== TAB 7: Entity Network (gated) ====================
+        with gr.Tab("Entity Network"):
+            gr.Markdown("### Knowledge graph exploration (detective API bridge)")
+            with gr.Row():
+                net_key = gr.Textbox(type="password", label="Admin Key", scale=2)
+                net_unlock_btn = gr.Button("Unlock", scale=1)
+            net_status = gr.Markdown("")
+
+            with gr.Group(visible=False) as net_controls:
+                with gr.Tabs():
+                    with gr.Tab("Overview"):
+                        with gr.Row():
+                            net_refresh_btn = gr.Button("Refresh Graph", variant="secondary")
+                            net_refresh_status = gr.Markdown("")
+                        net_overview_btn = gr.Button("Load Network Overview", variant="primary")
+                        net_overview_plot = gr.Plot(label="Entity Network")
+                        net_overview_stats = gr.Markdown("")
+
+                    with gr.Tab("Explorer"):
+                        with gr.Row():
+                            net_entity = gr.Textbox(label="Entity Name", placeholder="e.g. Jeffrey Epstein")
+                            net_hops = gr.Slider(1, 4, step=1, value=2, label="Hops")
+                            net_explore_btn = gr.Button("Explore", variant="primary")
+                        net_explore_plot = gr.Plot(label="Ego Network")
+                        net_explore_details = gr.Markdown("")
+
+            net_unlock_btn.click(
+                fn=check_admin_key, inputs=[net_key],
+                outputs=[net_controls, net_status],
+            )
+            net_refresh_btn.click(
+                fn=refresh_graph_cache, inputs=[],
+                outputs=[net_refresh_status],
+            )
+            net_overview_btn.click(
+                fn=network_overview, inputs=[net_key],
+                outputs=[net_overview_plot, net_overview_stats],
+            )
+            net_explore_btn.click(
+                fn=network_explore, inputs=[net_key, net_entity, net_hops],
+                outputs=[net_explore_plot, net_explore_details],
             )
 
         # ==================== TAB 6: Research ====================
