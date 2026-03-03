@@ -8,6 +8,7 @@ from src.core.providers import (
     ModelProvider,
     OllamaProvider,
     VLLMProvider,
+    classify_prompt,
     provider_from_env,
 )
 
@@ -65,6 +66,51 @@ def test_vllm_provider_raises_on_missing_openai() -> None:
     with patch("src.core.providers._OpenAI", None):
         with pytest.raises(ImportError, match="openai package required"):
             VLLMProvider(base_url="http://localhost:8000/v1", model="mistral")
+
+
+# --- classify_prompt tests ---
+
+
+class TestClassifyPrompt:
+    """Test prompt classification against real patterns from the codebase."""
+
+    def test_module_a_scoring_prompt(self) -> None:
+        # From module_a.py _SCORING_PROMPT
+        prompt = "Reply with: score: <float between 0 and 1>"
+        assert classify_prompt(prompt) == "scoring"
+
+    def test_module_b_scoring_prompt(self) -> None:
+        # From module_b.py _SCORE_PROMPT
+        prompt = "Reply with ONLY: score: <float>\n\nText span: some text"
+        assert classify_prompt(prompt) == "scoring"
+
+    def test_module_c_scoring_prompt(self) -> None:
+        # From module_c.py _SCORE_PROMPT
+        prompt = "Reply with ONLY: score: <float>\n\nSentence: test"
+        assert classify_prompt(prompt) == "scoring"
+
+    def test_evolution_scoring_prompt(self) -> None:
+        # From evolution.py confidence update prompt
+        prompt = "Reply with ONLY a float between 0.0 and 1.0 representing the updated confidence."
+        assert classify_prompt(prompt) == "scoring"
+
+    def test_graph_edge_scoring_prompt(self) -> None:
+        # From graph.py EDGE_SCORE_PROMPT
+        prompt = "Score the plausibility of this relationship on a scale from 0.0 to 1.0. Return only a single float.\n\nRelationship: A → B"
+        assert classify_prompt(prompt) == "scoring"
+
+    def test_parallel_evolution_scoring_prompt(self) -> None:
+        # From parallel_evolution.py _BRANCH_PROMPT
+        prompt = "Then state the updated confidence as: confidence: <float between 0 and 1>"
+        assert classify_prompt(prompt) == "scoring"
+
+    def test_reasoning_prompt_default(self) -> None:
+        prompt = "Analyze the following evidence and provide step-by-step reasoning:\n\nEvidence: financial records missing for 2013-2015"
+        assert classify_prompt(prompt) == "reasoning"
+
+    def test_unknown_prompt_defaults_to_reasoning(self) -> None:
+        prompt = "What is the meaning of life?"
+        assert classify_prompt(prompt) == "reasoning"
 
 
 # --- OllamaProvider tests ---

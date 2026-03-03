@@ -1,9 +1,13 @@
 import json
+import logging
 import os
+import re
 import urllib.error
 import urllib.request
 from typing import Any, Protocol, runtime_checkable
 from dataclasses import dataclass, field
+
+_logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI as _OpenAI
@@ -32,6 +36,23 @@ _ENV_OLLAMA_MODEL: str = "OLLAMA_MODEL"
 _ENV_CRITIC_ENDPOINT: str = "AZURE_CRITIC_ENDPOINT"
 _ENV_CRITIC_KEY: str = "AZURE_CRITIC_KEY"
 _ENV_CRITIC_MODEL: str = "AZURE_CRITIC_MODEL"
+
+# Patterns that identify scoring prompts (constrained output, float-only responses).
+# Matched against prompt text to decide local-vs-cloud routing.
+_SCORING_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"Reply with(?:\s+ONLY)?[:\s]+score:", re.IGNORECASE),
+    re.compile(r"Reply with ONLY a float between", re.IGNORECASE),
+    re.compile(r"Return only a single float", re.IGNORECASE),
+    re.compile(r"confidence:\s*<float", re.IGNORECASE),
+)
+
+
+def classify_prompt(prompt: str) -> str:
+    """Classify prompt as 'scoring' or 'reasoning' based on output directives."""
+    for pattern in _SCORING_PATTERNS:
+        if pattern.search(prompt):
+            return "scoring"
+    return "reasoning"
 
 
 @runtime_checkable
