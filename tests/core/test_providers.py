@@ -7,7 +7,6 @@ from src.core.providers import (
     HybridRoutingProvider,
     MockProvider,
     ModelProvider,
-    OllamaProvider,
     VLLMProvider,
     classify_prompt,
     provider_from_env,
@@ -114,46 +113,6 @@ class TestClassifyPrompt:
         assert classify_prompt(prompt) == "reasoning"
 
 
-# --- OllamaProvider tests ---
-
-
-def test_ollama_provider_satisfies_protocol() -> None:
-    with patch("src.core.providers._OpenAI"):
-        provider = OllamaProvider()
-    assert isinstance(provider, ModelProvider)
-
-
-def test_ollama_provider_defaults() -> None:
-    with patch("src.core.providers._OpenAI"):
-        provider = OllamaProvider()
-    assert provider.model == "qwen2.5:0.5b"
-    assert provider.base_url == "http://localhost:11434/v1"
-
-
-def test_ollama_provider_complete_calls_chat_completions() -> None:
-    with patch("src.core.providers._OpenAI"):
-        provider = OllamaProvider()
-
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = "0.85"
-    object.__setattr__(provider, "_client", mock_client)
-
-    output = provider.complete("Reply with ONLY: score: <float>")
-
-    mock_client.chat.completions.create.assert_called_once_with(
-        model="qwen2.5:0.5b",
-        messages=[{"role": "user", "content": "Reply with ONLY: score: <float>"}],
-        temperature=0.0,
-    )
-    assert output == "0.85"
-
-
-def test_ollama_provider_raises_on_missing_openai() -> None:
-    with patch("src.core.providers._OpenAI", None):
-        with pytest.raises(ImportError, match="openai package required"):
-            OllamaProvider()
-
-
 # --- AzureFoundryProvider tests ---
 
 
@@ -231,13 +190,13 @@ class TestHybridRoutingProvider:
     def test_scoring_fallback_on_exception(self) -> None:
         hybrid = self._make_hybrid()
         # Make scoring provider raise
-        hybrid.scoring_provider.complete = MagicMock(side_effect=ConnectionError("Ollama down"))  # type: ignore[assignment]
+        hybrid.scoring_provider.complete = MagicMock(side_effect=ConnectionError("vLLM down"))  # type: ignore[assignment]
         result = hybrid.complete("Reply with ONLY: score: <float>")
         assert result == "detailed analysis"  # fell back to reasoning
 
     def test_circuit_breaker_stays_open_after_failure(self) -> None:
         hybrid = self._make_hybrid()
-        hybrid.scoring_provider.complete = MagicMock(side_effect=ConnectionError("Ollama down"))  # type: ignore[assignment]
+        hybrid.scoring_provider.complete = MagicMock(side_effect=ConnectionError("vLLM down"))  # type: ignore[assignment]
         hybrid.complete("Reply with ONLY: score: <float>")  # triggers fallback
 
         # Now scoring should NOT be attempted — goes straight to reasoning
@@ -248,7 +207,7 @@ class TestHybridRoutingProvider:
 
     def test_reset_fallback_re_enables_scoring(self) -> None:
         hybrid = self._make_hybrid()
-        hybrid._ollama_available = False
+        hybrid._scoring_available = False
         hybrid.reset_fallback()
         result = hybrid.complete("Reply with ONLY: score: <float>")
         assert result == "0.75"
@@ -294,25 +253,6 @@ def test_provider_from_env_raises_when_not_set(monkeypatch) -> None:
         provider_from_env()
 
 
-def test_provider_from_env_returns_ollama(monkeypatch) -> None:
-    monkeypatch.setenv("DETECTIVE_PROVIDER", "ollama")
-    with patch("src.core.providers._OpenAI"):
-        p = provider_from_env()
-    assert isinstance(p, OllamaProvider)
-    assert p.model == "qwen2.5:0.5b"
-
-
-def test_provider_from_env_returns_ollama_with_custom_url(monkeypatch) -> None:
-    monkeypatch.setenv("DETECTIVE_PROVIDER", "ollama")
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-box:11434/v1")
-    monkeypatch.setenv("OLLAMA_MODEL", "llama3.2:1b")
-    with patch("src.core.providers._OpenAI"):
-        p = provider_from_env()
-    assert isinstance(p, OllamaProvider)
-    assert p.base_url == "http://gpu-box:11434/v1"
-    assert p.model == "llama3.2:1b"
-
-
 def test_provider_from_env_returns_hybrid(monkeypatch) -> None:
     monkeypatch.setenv("DETECTIVE_PROVIDER", "hybrid")
     monkeypatch.setenv("AZURE_ENDPOINT", "https://example.azure.com")
@@ -321,7 +261,24 @@ def test_provider_from_env_returns_hybrid(monkeypatch) -> None:
     with patch("src.core.providers._OpenAI"):
         p = provider_from_env()
     assert isinstance(p, HybridRoutingProvider)
+    assert isinstance(p.scoring_provider, VLLMProvider)
     assert isinstance(p.reasoning_provider, AzureFoundryProvider)
+    assert p.scoring_provider.base_url == "http://localhost:8100/v1"
+    assert p.scoring_provider.model == "Qwen/Qwen2.5-0.5B-Instruct"
+
+
+def test_provider_from_env_hybrid_custom_scoring(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTIVE_PROVIDER", "hybrid")
+    monkeypatch.setenv("VLLM_SCORING_URL", "http://gpu-box:8100/v1")
+    monkeypatch.setenv("VLLM_SCORING_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
+    monkeypatch.setenv("AZURE_ENDPOINT", "https://example.azure.com")
+    monkeypatch.setenv("AZURE_API_KEY", "key")
+    monkeypatch.setenv("AZURE_MODEL", "claude-haiku-4-5")
+    with patch("src.core.providers._OpenAI"):
+        p = provider_from_env()
+    assert isinstance(p, HybridRoutingProvider)
+    assert p.scoring_provider.base_url == "http://gpu-box:8100/v1"
+    assert p.scoring_provider.model == "Qwen/Qwen2.5-1.5B-Instruct"
 
 
 def test_provider_from_env_error_lists_all_options(monkeypatch) -> None:

@@ -88,7 +88,7 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 - Layer 3: Scenario extraction — real text → construct profiles → trajectory patterns → synthetic training scenarios for forecaster (ADR-011)
 - Data flywheel: detective findings enrich forecaster training data, forecaster predictions inform detective prioritization
 
-**Hybrid provider routing (ADR-013)** — `HybridRoutingProvider` in `src/core/providers.py` inspects prompt text via `classify_prompt()` to route scoring calls (modules A/B/C, evolution, graph — "Reply with ONLY: score:") to local Ollama (qwen2.5:0.5b, 30s timeout) and reasoning calls to Azure Foundry. Circuit-breaker: if Ollama fails, all calls fall back to Azure until `reset_fallback()`. Set `DETECTIVE_PROVIDER=hybrid` to activate. No call-site changes required.
+**Hybrid provider routing (ADR-013)** — `HybridRoutingProvider` in `src/core/providers.py` inspects prompt text via `classify_prompt()` to route scoring calls (modules A/B/C, evolution, graph — "Reply with ONLY: score:") to a local vLLM CPU instance (Qwen2.5-0.5B-Instruct via Docker, ~700ms/call) and reasoning calls to Azure Foundry. Circuit-breaker: if vLLM fails, all calls fall back to Azure until `reset_fallback()`. Set `DETECTIVE_PROVIDER=hybrid` to activate; `VLLM_SCORING_URL`/`VLLM_SCORING_MODEL` override defaults. No call-site changes required.
 
 ### Implementation status
 

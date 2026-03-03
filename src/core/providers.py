@@ -20,19 +20,18 @@ _AZURE_EMBED_NOT_SUPPORTED: str = "AzureFoundryProvider does not support embeddi
 _PROVIDER_VLLM: str = "vllm"
 _PROVIDER_AZURE: str = "azure"
 _PROVIDER_HYBRID: str = "hybrid"
-_PROVIDER_OLLAMA: str = "ollama"
 _ENV_PROVIDER: str = "DETECTIVE_PROVIDER"
 _ENV_VLLM_URL: str = "VLLM_BASE_URL"
 _ENV_VLLM_MODEL: str = "VLLM_MODEL"
+_ENV_VLLM_SCORING_URL: str = "VLLM_SCORING_URL"
+_ENV_VLLM_SCORING_MODEL: str = "VLLM_SCORING_MODEL"
 _ENV_AZURE_ENDPOINT: str = "AZURE_ENDPOINT"
 _ENV_AZURE_KEY: str = "AZURE_API_KEY"
 _ENV_AZURE_MODEL: str = "AZURE_MODEL"
-_ENV_OLLAMA_URL: str = "OLLAMA_BASE_URL"
-_ENV_OLLAMA_MODEL: str = "OLLAMA_MODEL"
 
 # Critic provider — separate from the main inference provider.
 # Used in the CAI critique loop (constitutional warmup, preference pair generation).
-# Reads AZURE_CRITIC_* vars so both Ollama (local) and Azure (critic) can be set at once.
+# Reads AZURE_CRITIC_* vars so both vLLM (local) and Azure (critic) can be set at once.
 _ENV_CRITIC_ENDPOINT: str = "AZURE_CRITIC_ENDPOINT"
 _ENV_CRITIC_KEY: str = "AZURE_CRITIC_KEY"
 _ENV_CRITIC_MODEL: str = "AZURE_CRITIC_MODEL"
@@ -108,44 +107,6 @@ class VLLMProvider:
 
 
 @dataclass(frozen=True)
-class OllamaProvider:
-    """Connects to a local Ollama instance (OpenAI-compatible API).
-
-    Designed for lightweight scoring prompts on small models (e.g. qwen2.5:0.5b).
-    Uses a 30s timeout to fail fast — if Ollama is slow, callers should fall back
-    to a cloud provider rather than block.
-    """
-    base_url: str = "http://localhost:11434/v1"
-    model: str = "qwen2.5:0.5b"
-    temperature: float = 0.0
-    _client: Any = field(default=None, init=False, repr=False, compare=False)
-
-    def __post_init__(self) -> None:
-        if _OpenAI is None:
-            raise ImportError("openai package required for OllamaProvider")
-        object.__setattr__(self, "_client", _OpenAI(
-            base_url=self.base_url,
-            api_key=_VLLM_DUMMY_API_KEY,  # Ollama ignores this but OpenAI client requires it
-            timeout=30.0,  # fail fast — scoring prompts are simple
-        ))
-
-    def complete(self, prompt: str, **kwargs) -> str:
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=kwargs.get("temperature", self.temperature),
-        )
-        content = response.choices[0].message.content
-        if content is None:
-            raise ValueError(f"Ollama returned no content for model {self.model!r}")
-        return content
-
-    def embed(self, text: str) -> list[float]:
-        response = self._client.embeddings.create(model=self.model, input=text)
-        return response.data[0].embedding
-
-
-@dataclass(frozen=True)
 class AzureFoundryProvider:
     """Azure AI Foundry — Anthropic-native endpoint.
 
@@ -196,24 +157,24 @@ class AzureFoundryProvider:
 
 @dataclass
 class HybridRoutingProvider:
-    """Routes scoring prompts to a local model and reasoning prompts to Azure.
+    """Routes scoring prompts to a local vLLM instance and reasoning prompts to Azure.
 
     Uses classify_prompt() to inspect prompt text. Circuit-breaker: if the
     scoring provider fails once, all subsequent calls fall back to the
     reasoning provider until reset_fallback() is called.
     """
-    scoring_provider: OllamaProvider
+    scoring_provider: VLLMProvider
     reasoning_provider: AzureFoundryProvider
-    _ollama_available: bool = field(default=True, init=False, repr=False)
+    _scoring_available: bool = field(default=True, init=False, repr=False)
 
     def complete(self, prompt: str, **kwargs) -> str:
         route = classify_prompt(prompt)
-        if route == "scoring" and self._ollama_available:
+        if route == "scoring" and self._scoring_available:
             try:
                 return self.scoring_provider.complete(prompt, **kwargs)
             except Exception as exc:
-                _logger.warning("Ollama failed (%s), falling back to Azure", exc)
-                self._ollama_available = False
+                _logger.warning("Scoring provider failed (%s), falling back to Azure", exc)
+                self._scoring_available = False
                 return self.reasoning_provider.complete(prompt, **kwargs)
         return self.reasoning_provider.complete(prompt, **kwargs)
 
@@ -221,14 +182,14 @@ class HybridRoutingProvider:
         raise NotImplementedError("HybridRoutingProvider does not support embeddings")
 
     def reset_fallback(self) -> None:
-        """Re-enable scoring provider after Ollama recovery."""
-        self._ollama_available = True
+        """Re-enable scoring provider after recovery."""
+        self._scoring_available = True
 
 
 def critic_provider_from_env() -> "AzureFoundryProvider":
     """Load Azure Foundry critic from AZURE_CRITIC_* env vars.
 
-    Separate from provider_from_env() so local Ollama inference and
+    Separate from provider_from_env() so local vLLM inference and
     Azure Foundry critique can be active simultaneously during CAI warmup.
 
     Required env vars:
@@ -249,12 +210,12 @@ def critic_provider_from_env() -> "AzureFoundryProvider":
 
 
 def provider_from_env() -> ModelProvider:
-    """Select provider from environment. DETECTIVE_PROVIDER=vllm|azure|ollama|hybrid."""
+    """Select provider from environment. DETECTIVE_PROVIDER=vllm|azure|hybrid."""
     provider_type = os.environ.get(_ENV_PROVIDER)
     if provider_type is None:
         raise ValueError(
             f"{_ENV_PROVIDER} is not set. Must be one of: "
-            f"{_PROVIDER_VLLM!r}, {_PROVIDER_AZURE!r}, {_PROVIDER_OLLAMA!r}, {_PROVIDER_HYBRID!r}"
+            f"{_PROVIDER_VLLM!r}, {_PROVIDER_AZURE!r}, {_PROVIDER_HYBRID!r}"
         )
     if provider_type == _PROVIDER_VLLM:
         base_url = os.environ[_ENV_VLLM_URL]
@@ -265,15 +226,11 @@ def provider_from_env() -> ModelProvider:
         api_key = os.environ[_ENV_AZURE_KEY]
         model = os.environ[_ENV_AZURE_MODEL]
         return AzureFoundryProvider(endpoint=endpoint, api_key=api_key, model=model)
-    elif provider_type == _PROVIDER_OLLAMA:
-        base_url = os.environ.get(_ENV_OLLAMA_URL, "http://localhost:11434/v1")
-        model = os.environ.get(_ENV_OLLAMA_MODEL, "qwen2.5:0.5b")
-        return OllamaProvider(base_url=base_url, model=model)
     elif provider_type == _PROVIDER_HYBRID:
-        # Scoring → local Ollama, reasoning → Azure Foundry
-        ollama_url = os.environ.get(_ENV_OLLAMA_URL, "http://localhost:11434/v1")
-        ollama_model = os.environ.get(_ENV_OLLAMA_MODEL, "qwen2.5:0.5b")
-        scoring = OllamaProvider(base_url=ollama_url, model=ollama_model)
+        # Scoring → local vLLM (small model), reasoning → Azure Foundry
+        scoring_url = os.environ.get(_ENV_VLLM_SCORING_URL, "http://localhost:8100/v1")
+        scoring_model = os.environ.get(_ENV_VLLM_SCORING_MODEL, "Qwen/Qwen2.5-0.5B-Instruct")
+        scoring = VLLMProvider(base_url=scoring_url, model=scoring_model)
         azure_endpoint = os.environ[_ENV_AZURE_ENDPOINT]
         azure_key = os.environ[_ENV_AZURE_KEY]
         azure_model = os.environ[_ENV_AZURE_MODEL]
@@ -283,5 +240,5 @@ def provider_from_env() -> ModelProvider:
         return HybridRoutingProvider(scoring_provider=scoring, reasoning_provider=reasoning)
     raise ValueError(
         f"Unknown provider type {provider_type!r}. "
-        f"Set {_ENV_PROVIDER}=vllm|azure|ollama|hybrid"
+        f"Set {_ENV_PROVIDER}=vllm|azure|hybrid"
     )
