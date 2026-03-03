@@ -231,14 +231,14 @@ def check_admin_key(key):
     return gr.update(visible=False), "Invalid key."
 
 
-def do_launch_training(key, epochs, lr, hidden_size, batch_size, scenarios_per_type, hardware):
+def do_launch_training(key, epochs, lr, hidden_size, batch_size, scenarios_per_type, hardware, graph_features):
     expected = os.environ.get("ADMIN_KEY", "")
     if key != expected or not expected:
         return "Not authenticated."
     job_id, msg = launch_training_job(
         epochs=int(epochs), lr=float(lr), hidden_size=int(hidden_size),
         batch_size=int(batch_size), scenarios_per_type=int(scenarios_per_type),
-        hardware=hardware,
+        hardware=hardware, graph_features_enabled=bool(graph_features),
     )
     return msg
 
@@ -648,6 +648,10 @@ with gr.Blocks(
                 with gr.Row():
                     train_scenarios = gr.Slider(10, 200, value=50, step=10, label="Scenarios per Type")
                     train_hardware = gr.Dropdown(choices=list(HARDWARE_OPTIONS.keys()), value="t4-small", label="Hardware")
+                train_graph_cb = gr.Checkbox(
+                    value=False, label="Include graph topology features (43-dim input)",
+                    info="Adds 7 simulated graph features during training. Required for graph-enhanced inference.",
+                )
                 train_launch_btn = gr.Button("Launch Training Job", variant="primary")
                 train_result = gr.Markdown("")
 
@@ -658,7 +662,7 @@ with gr.Blocks(
             train_launch_btn.click(
                 fn=do_launch_training,
                 inputs=[train_key, train_epochs, train_lr, train_hidden,
-                        train_batch, train_scenarios, train_hardware],
+                        train_batch, train_scenarios, train_hardware, train_graph_cb],
                 outputs=[train_result],
             )
 

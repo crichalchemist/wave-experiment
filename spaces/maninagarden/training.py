@@ -40,6 +40,7 @@ def get_training_script(
     scenarios_per_type: int,
     pred_len: int = 10,
     seq_len: int = 50,
+    graph_features_enabled: bool = False,
 ) -> str:
     """Return a complete, self-contained Python script string for HF Jobs.
 
@@ -47,6 +48,10 @@ def get_training_script(
     code (with recovery_aware_input and equity_weights on effective inputs),
     signal processing, scenario generation, model architecture, training
     loop with Trackio logging, and checkpoint push to the Hub.
+
+    When graph_features_enabled=True, the script appends 7 simulated graph
+    topology features to each scenario (43-dim input). Graph features use
+    Beta distributions mimicking realistic knowledge graph statistics.
 
     Parameters are baked into the script via f-string interpolation.
     All dict/set literals inside the generated code use doubled braces.
@@ -285,6 +290,46 @@ def compute_all_signals(df, window=20):
     return out
 
 
+GRAPH_FEATURES_ENABLED = {"True" if graph_features_enabled else "False"}
+GRAPH_FEATURE_NAMES = (
+    "graph_density", "entity_pagerank", "entity_degree",
+    "entity_clustering", "community_size", "avg_neighbor_conf", "hub_score",
+)
+
+
+def simulate_graph_features(rng, length):
+    """Simulate 7 graph topology features from realistic distributions.
+
+    Features are constant per trajectory (graph topology is static).
+    Beta distributions approximate real knowledge graph statistics:
+    - density: Beta(2, 50) — sparse graphs
+    - pagerank: Beta(1, 20) — most nodes have low centrality
+    - degree: Beta(2, 8) — moderate connectivity
+    - clustering: Beta(2, 5) — moderate local clustering
+    - community_size: Beta(2, 10) — most communities are small fraction
+    - avg_neighbor_conf: Beta(5, 3) — edge confidence skews high
+    - hub_score: Beta(1, 15) — few hubs
+    """
+    vals = {{
+        "graph_density": float(rng.beta(2, 50)),
+        "entity_pagerank": float(rng.beta(1, 20)),
+        "entity_degree": float(rng.beta(2, 8)),
+        "entity_clustering": float(rng.beta(2, 5)),
+        "community_size": float(rng.beta(2, 10)),
+        "avg_neighbor_conf": float(rng.beta(5, 3)),
+        "hub_score": float(rng.beta(1, 15)),
+    }}
+    return vals
+
+
+def compute_all_signals_with_graph(df, graph_features, window=20):
+    """Compute 43 features: 36 base + 7 graph topology."""
+    features = compute_all_signals(df, window)
+    for key in GRAPH_FEATURE_NAMES:
+        features[key] = graph_features.get(key, 0.0)
+    return features
+
+
 # ============================================================================
 # Inline synthetic generator
 # ============================================================================
@@ -498,7 +543,11 @@ def main():
         for i in range(scenarios_per_type):
             rng = np.random.default_rng(seed + s_idx * 1000 + i)
             df = generate_scenario(scenario, length=length, rng=rng)
-            features = compute_all_signals(df, window=window)
+            if GRAPH_FEATURES_ENABLED:
+                gf = simulate_graph_features(rng, length)
+                features = compute_all_signals_with_graph(df, gf, window=window)
+            else:
+                features = compute_all_signals(df, window=window)
 
             # Scaler fit on FIRST scenario (stable_community, seed=42) — matches inference scaler
             if feature_names is None:
@@ -547,7 +596,11 @@ def main():
                     phi_vals.append(compute_phi(metrics, derivatives=derivs))
                 ext_df["phi"] = phi_vals
 
-                features = compute_all_signals(ext_df, window=window)
+                if GRAPH_FEATURES_ENABLED:
+                    gf = simulate_graph_features(ext_rng, length)
+                    features = compute_all_signals_with_graph(ext_df, gf, window=window)
+                else:
+                    features = compute_all_signals(ext_df, window=window)
                 X = scaler.transform(features[feature_names].values)
                 for j in range(len(X) - seq_len - pred_len):
                     all_X.append(X[j:j + seq_len])
@@ -636,10 +689,11 @@ def main():
     # Save metadata
     metadata = {{
         "model": "PhiForecasterGPU", "hidden_size": hidden_size, "n_layers": 2,
-        "pred_len": pred_len, "input_features": n_features, "epochs": epochs,
-        "best_val_loss": best_val_loss, "train_sequences": len(train_ds),
-        "scenarios": list(SCENARIOS), "scenarios_per_type": scenarios_per_type,
-        "formula_version": FORMULA_VERSION,
+        "pred_len": pred_len, "input_size": n_features, "input_features": n_features,
+        "epochs": epochs, "best_val_loss": best_val_loss,
+        "train_sequences": len(train_ds), "scenarios": list(SCENARIOS),
+        "scenarios_per_type": scenarios_per_type, "formula_version": FORMULA_VERSION,
+        "graph_features_enabled": GRAPH_FEATURES_ENABLED,
     }}
     with open("/tmp/training_metadata.json", "w") as f:
         json.dump(metadata, f, indent=2)
@@ -669,6 +723,7 @@ def launch_training_job(
     scenarios_per_type: int,
     hardware: str = "t4-small",
     timeout: int = 7200,
+    graph_features_enabled: bool = False,
 ) -> Tuple[str, str]:
     """Launch a training job on HF Jobs.
 
@@ -689,6 +744,7 @@ def launch_training_job(
         hidden_size=hidden_size,
         batch_size=batch_size,
         scenarios_per_type=scenarios_per_type,
+        graph_features_enabled=graph_features_enabled,
     )
 
     try:
