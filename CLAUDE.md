@@ -33,6 +33,8 @@ detective network --entity "Entity A" --hops 3
 
 # Bootstrap directory structure (idempotent, for new checkouts)
 python bootstrap.py
+
+# Note: async tests require pytest-asyncio (included in dev deps)
 ```
 
 ## Architecture
@@ -49,7 +51,10 @@ src/core/model.py    ← DetectiveGPT (PyTorch nn.Module)
 src/detective/       ← A+B+C assumption detection + hypothesis evolution
 src/training/        ← Multi-task loss, baseline + gap-detection training loops
 src/inference/       ← n-hop network reasoning, contradiction detection
+src/forecasting/     ← Phi trajectory forecasting (PhiTrajectoryForecaster)
 src/data/            ← Epstein dataset loaders, entity extraction, knowledge graph
+src/data/sourcing/   ← FOIA scraping + legal source pipelines
+src/security/        ← Constitution client (epistemic moral compass)
 src/api/             ← FastAPI endpoints + D3.js visualization export
 src/cli/main.py      ← Click CLI (entry: `detective` script)
 ```
@@ -73,7 +78,7 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 **Graph of Thought (GoT) parallel hypothesis evolution** — `src/detective/parallel_evolution.py` implements Generate(k) via `asyncio.gather()`. When `phi_metrics` is provided, branches ranked by 4-weight `combined_score = 0.45·confidence + 0.25·welfare_relevance + 0.15·curiosity_relevance + 0.15·trajectory_urgency` (ADR-010). Without `phi_metrics`, falls back to confidence-only sorting. SC-first branching: breadth below 0.5 confidence, depth above.
 
-**Phi(humanity) welfare function** — `src/inference/welfare_scoring.py` scores hypotheses by which welfare constructs they threaten. Gradients of Φ prioritize leads threatening scarce constructs. Curiosity coupling (love × truth) surfaces investigative hunches. Formula documented in `docs/humanity-phi-formalized.md`.
+**Phi(humanity) welfare function (v2.1)** — `src/inference/welfare_scoring.py` scores hypotheses by which welfare constructs they threaten. Formula at v2.1 with recovery-aware floors and derivative tracking. Gradients of Φ prioritize leads threatening scarce constructs. Curiosity coupling (love × truth) surfaces investigative hunches. Formula documented in `docs/humanity-phi-formalized.md`.
 
 **Phi Forecaster Space** — `spaces/maninagarden/` is a modular Gradio workbench (6 tabs) for forecasting welfare trajectories. `welfare.py` is the evolved formula source (v2.1-recovery-floors). Launches GPU training via HF Jobs. Live at `crichalchemist/maninagarden`.
 
@@ -85,13 +90,13 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 ### Implementation status
 
-**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi formula, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry provider), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py` (includes `extract-scenarios` command). Full test suite: 531+ tests passing.
+**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi v2.1 formula, recovery floors, derivatives, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/data/sourcing/` (foia_scraper.py, dual_pipeline.py, legal_sources.py — FOIA + legal source ingestion), `src/security/constitution.py` (epistemic moral compass client), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry provider), `src/api/routes.py` (FastAPI endpoints), `src/cli/main.py` (includes `extract-scenarios` command). Full test suite: 564+ tests passing.
 
 **Stubs:** `src/training/constitutional_warmup.py`, multi-task loss integration, document ingestion pipeline.
 
 **Design docs:** `docs/plans/` contains implementation plans and design docs. `docs/humanity-phi-formalized.md` is the welfare function paper. `docs/constitution.md` is the epistemic moral compass.
 
-**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-011). Consult before making changes to the systems they cover.
+**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-012). Consult before making changes to the systems they cover.
 
 ### Data layout (planned)
 
