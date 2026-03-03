@@ -39,13 +39,14 @@ def test_analyze_warns_on_high_risk_injection(tmp_path: Path) -> None:
     assert "WARNING" in result.output or result.exit_code == 0
 
 
-def test_network_outputs_document_info(tmp_path: Path) -> None:
-    doc = _make_doc(tmp_path, "Court records from 2019.")
+def test_network_no_connections(tmp_path: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["network", str(doc)])
+    with patch("src.data.graph_store.graph_store_from_env") as mock_gsfe:
+        from src.data.graph_store import InMemoryGraph
+        mock_gsfe.return_value = InMemoryGraph()
+        result = runner.invoke(cli, ["network", "--entity", "Nobody"])
     assert result.exit_code == 0
-    assert "test.txt" in result.output
-    assert "Characters" in result.output
+    assert "No connections found" in result.output
 
 
 def test_critique_outputs_critic_response(tmp_path: Path) -> None:

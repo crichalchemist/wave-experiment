@@ -47,25 +47,57 @@ def analyze(doc_path: Path, query: str, constitution: str) -> None:
 
 
 @cli.command()
-@click.argument("doc_path", type=click.Path(exists=True, readable=True, path_type=Path))
-def network(doc_path: Path) -> None:
-    """Build and display the knowledge graph entities from a document."""
-    text = doc_path.read_text(encoding="utf-8")
-    result = sanitize_document(text)
+@click.option("--entity", "-e", required=True, help="Entity name to explore.")
+@click.option("--hops", default=2, type=int, help="Maximum hop depth.")
+@click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text",
+              help="Output format.")
+def network(entity: str, hops: int, fmt: str) -> None:
+    """Explore entity relationships in the knowledge graph."""
+    import json as _json
 
-    if result.injection_detected:
-        click.echo(
-            f"NOTE: Injection patterns detected ({result.risk_level}). "
-            "Document content is sandboxed.",
-            err=True,
-        )
+    from src.data.graph_store import graph_store_from_env
 
-    # Entity extraction placeholder — wired to NER in a later phase
-    click.echo(f"Document: {doc_path.name}")
-    click.echo(f"Characters: {len(result.safe_text)}")
-    click.echo(f"Injection detected: {result.injection_detected}")
-    if result.findings:
-        click.echo(f"Security findings: {', '.join(result.findings)}")
+    graph = graph_store_from_env()
+    successors = graph.successors(entity)
+
+    if not successors:
+        click.echo(f"No connections found for '{entity}'.")
+        return
+
+    if fmt == "json":
+        rows = []
+        for target in sorted(successors):
+            edge = graph.get_edge(entity, target)
+            if edge:
+                rows.append({
+                    "source": entity,
+                    "target": target,
+                    "relation": edge.relation.value,
+                    "confidence": edge.confidence,
+                })
+        click.echo(_json.dumps(rows, indent=2))
+    else:
+        click.echo(f"Entity: {entity}")
+        click.echo(f"Direct connections ({len(successors)}):")
+        for target in sorted(successors):
+            edge = graph.get_edge(entity, target)
+            if edge:
+                click.echo(
+                    f"  {entity} --[{edge.relation.value}]--> "
+                    f"{target} (confidence: {edge.confidence:.2f})"
+                )
+
+    # n-hop exploration: find paths between this entity and its successors' successors
+    click.echo(f"\nPaths (up to {hops} hops):")
+    seen_targets: set[str] = set()
+    for successor in successors:
+        for next_hop in graph.successors(successor):
+            if next_hop != entity and next_hop not in seen_targets:
+                seen_targets.add(next_hop)
+                paths = graph.n_hop_paths(entity, next_hop, max_hops=hops)
+                for p in paths[:3]:  # top 3 paths per target
+                    path_str = " → ".join(p.path)
+                    click.echo(f"  {path_str} (confidence: {p.confidence:.4f}, hops: {p.hops})")
 
 
 @cli.command()
@@ -324,3 +356,25 @@ def extract_scenarios(corpus_path: str, output: str, length: int) -> None:
         json.dump(templates, f, indent=2)
 
     click.echo(f"Saved {len(templates)} scenario templates to {output}")
+
+
+@cli.command("ingest-epstein")
+@click.option("--root", type=click.Path(exists=True, path_type=Path),
+              default="data/epstein-docs", show_default=True,
+              help="Root directory of the epstein-docs dataset.")
+@click.option("--max-pages", type=int, default=None,
+              help="Limit the number of pages to process.")
+def ingest_epstein_cmd(root: Path, max_pages: int | None) -> None:
+    """Ingest epstein-docs entities into the knowledge graph."""
+    from src.data.graph_store import graph_store_from_env
+    from src.data.ingest_epstein import ingest_epstein
+
+    graph = graph_store_from_env()
+    click.echo(f"Ingesting from {root} ...")
+
+    stats = ingest_epstein(root, graph, max_pages=max_pages)
+
+    click.echo(f"Pages processed: {stats.pages_processed}")
+    click.echo(f"Entities added:  {stats.entities_added}")
+    click.echo(f"Edges created:   {stats.edges_created}")
+    click.echo(f"Skipped:         {stats.skipped}")
