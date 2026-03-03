@@ -472,80 +472,115 @@ Our λ_L (love) measures active nurturing (positive freedom), λ_P (protection) 
 ### 5.1 Python Reference Implementation
 
 ```python
-import numpy as np
+import math
+from typing import Dict, Optional
 
-def humanity_phi(
-    metrics: dict[str, float],  # {c, kappa, j, p, eps, lam_L, lam_P, xi}
-    weights: dict[str, float] = None,
-    eta: float = 0.05,
-    mu: float = 0.15,
+ALL_CONSTRUCTS = ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]
+
+CONSTRUCT_FLOORS = {
+    "c": 0.20, "kappa": 0.20, "lam_P": 0.20,
+    "lam_L": 0.15, "xi": 0.30,
+    "j": 0.10, "p": 0.10, "eps": 0.10,
+}
+
+def sigmoid(x: float) -> float:
+    return 1.0 / (1.0 + math.exp(-x))
+
+def community_multiplier(lam_L: float, gamma: float = 0.5) -> float:
+    """f(λ_L) = λ_L^γ — Ubuntu substrate multiplier."""
+    return max(0.01, lam_L) ** gamma
+
+def recovery_aware_input(x_i, floor_i, dx_dt_i, lam_L):
+    """Recovery-aware effective input for a construct (v2.1)."""
+    if x_i >= floor_i:
+        return x_i
+    trajectory = sigmoid(10.0 * dx_dt_i - 3.0)
+    community_capacity = max(0.01, lam_L) ** 0.5
+    recovery_potential = max(trajectory, community_capacity * 0.5)
+    return x_i + (floor_i - x_i) * recovery_potential
+
+def equity_weights(effective: Dict[str, float]) -> Dict[str, float]:
+    """Inverse-deprivation weights: wᵢ = (1/x̃ᵢ) / Σⱼ(1/x̃ⱼ)."""
+    inv = {c: 1.0 / max(0.01, v) for c, v in effective.items()}
+    total = sum(inv.values())
+    return {c: v / total for c, v in inv.items()}
+
+def ubuntu_synergy(metrics: Dict[str, float], eta: float = 0.10,
+                   eta_curiosity: float = 0.08) -> float:
+    """Ψ_ubuntu synergy on RAW metrics."""
+    c = metrics.get("c", 0.5)
+    kappa = metrics.get("kappa", 0.5)
+    j = metrics.get("j", 0.5)
+    p = metrics.get("p", 0.5)
+    eps = metrics.get("eps", 0.5)
+    lam_L = metrics.get("lam_L", 0.5)
+    lam_P = metrics.get("lam_P", 0.5)
+    xi = metrics.get("xi", 0.5)
+    pairs = (math.sqrt(c * lam_L) + math.sqrt(kappa * lam_P)
+             + math.sqrt(j * p) + math.sqrt(eps * xi))
+    curiosity = math.sqrt(lam_L * xi)
+    return 1.0 + eta * pairs + eta_curiosity * curiosity
+
+def divergence_penalty(metrics: Dict[str, float], mu: float = 0.15) -> float:
+    """Ψ_penalty on RAW metrics (5 pairs including curiosity cross-pair)."""
+    c = metrics.get("c", 0.5)
+    kappa = metrics.get("kappa", 0.5)
+    j = metrics.get("j", 0.5)
+    p = metrics.get("p", 0.5)
+    eps = metrics.get("eps", 0.5)
+    lam_L = metrics.get("lam_L", 0.5)
+    lam_P = metrics.get("lam_P", 0.5)
+    xi = metrics.get("xi", 0.5)
+    sq = ((c - lam_L)**2 + (kappa - lam_P)**2 + (j - p)**2
+          + (eps - xi)**2 + (lam_L - xi)**2)
+    return mu * sq / 5
+
+def compute_phi(
+    metrics: Dict[str, float],
+    derivatives: Optional[Dict[str, float]] = None,
 ) -> float:
     """
-    Nash Social Welfare formulation of Phi(humanity) with 8 constructs.
+    Compute Phi(humanity) — the full welfare function (v2.1).
+
+    Phi = f(lam_L) * product(x_tilde_i ^ w_i) * Psi_ubuntu * (1 - Psi_penalty)
+
+    v2.1: recovery_aware_input() is called for each construct before the
+    weighted geometric mean. Synergy and penalty still operate on raw
+    metrics (they detect actual state).
 
     Args:
-        metrics: Dict with keys {c, kappa, j, p, eps, lam_L, lam_P, xi},
-                 values in [0,1] (Atkinson complements)
-        weights: Optional Nash SWF weights (default: 1/8 each)
-        eta: Synergy coupling strength
-        mu: Divergence penalty strength
-
-    Returns:
-        Phi in [0, 1]
-
-    Citations:
-        - Nash SWF: Kaneko & Nakamura 1979
-        - Atkinson inequality: Atkinson 1970
-        - Love construct: hooks 2000
-        - Capability inputs: Sen 1999, Nussbaum 2000
+        metrics: Dict mapping each construct symbol to a value in [0, 1].
+        derivatives: Optional dict of dx/dt per construct. Defaults to 0.0.
     """
-    c = metrics['c']
-    kappa = metrics['kappa']
-    j = metrics['j']
-    p = metrics['p']
-    eps = metrics['eps']
-    lam_L = metrics['lam_L']
-    lam_P = metrics['lam_P']
-    xi = metrics['xi']
+    if derivatives is None:
+        derivatives = {}
 
-    # Exponents: α<1 for basic/relational (concave), α=1 for experiential/epistemic
-    exponents = {
-        'c': 0.7, 'kappa': 0.7,           # Basic needs (Rawls 1971)
-        'j': 1.0, 'p': 1.0,                # Experiential (Csikszentmihalyi 1990)
-        'eps': 0.8, 'lam_L': 0.8, 'lam_P': 0.8,  # Relational (hooks 2000)
-        'xi': 1.0                          # Epistemic (Fricker 2007)
-    }
+    lam_L_raw = max(0.01, metrics.get("lam_L", 0.5))
+    f_lam = community_multiplier(lam_L_raw)
 
-    # Nash SWF weights (default equal, sum to 1)
-    if weights is None:
-        weights = {k: 1.0/8 for k in exponents.keys()}
+    # Recovery-aware effective values
+    effective: Dict[str, float] = {}
+    for c in ALL_CONSTRUCTS:
+        x_raw = max(0.01, metrics.get(c, 0.5))
+        floor_c = CONSTRUCT_FLOORS[c]
+        dx_dt_c = derivatives.get(c, 0.0)
+        effective[c] = recovery_aware_input(x_raw, floor_c, dx_dt_c, lam_L_raw)
 
-    # Nash SWF base (multiplicative)
-    base = 1.0
-    for key, x in metrics.items():
-        alpha = exponents[key]
-        theta = weights[key]
-        base *= (x**alpha) ** theta
+    # Equity weights on effective values
+    weights = equity_weights(effective)
 
-    # Synergy (geometric mean of pairs)
-    synergy = 1 + eta * (
-        np.sqrt(c * lam_L) +      # Care × Love
-        np.sqrt(kappa * lam_P) +  # Compassion × Protection
-        np.sqrt(j * p) +          # Joy × Purpose
-        np.sqrt(eps * xi)         # Empathy × Truth
-    )
+    # Weighted geometric mean of effective values
+    product = 1.0
+    for c in ALL_CONSTRUCTS:
+        x_eff = max(0.01, effective[c])
+        product *= x_eff ** weights[c]
 
-    # Penalty (squared divergence)
-    penalty = mu * (
-        (c - lam_L)**2 +
-        (kappa - lam_P)**2 +
-        (j - p)**2 +
-        (eps - xi)**2
-    ) / 4
+    # Synergy and penalty on RAW metrics
+    synergy = ubuntu_synergy(metrics)
+    penalty = divergence_penalty(metrics)
 
-    phi = base * synergy * (1 - penalty)
-
-    return max(0.0, min(1.0, phi))
+    phi = f_lam * product * synergy * (1.0 - penalty)
+    return max(0.0, phi)
 ```
 
 ### 5.2 Constraint Layer (Rights-Based Floors)
@@ -730,7 +765,7 @@ Washington, H. A. (2006). *Medical Apartheid: The Dark History of Medical Experi
 
 Anthropic. (2022). Constitutional AI: Harmlessness from AI feedback. *arXiv preprint arXiv:2212.08073*.
 
-Bostom, N. (2014). *Superintelligence: Paths, Dangers, Strategies*. Oxford University Press.
+Bostrom, N. (2014). *Superintelligence: Paths, Dangers, Strategies*. Oxford University Press.
 
 Christiano, P., Leike, J., Brown, T. B., Martic, M., Legg, S., & Amodei, D. (2017). Deep reinforcement learning from human preferences. *arXiv preprint arXiv:1706.03741*.
 
@@ -809,14 +844,14 @@ This work builds on decades of scholarship in welfare economics (Atkinson, Sen, 
 
 **Conflicts of Interest:** None declared.
 
-**Data Availability:** Reference implementation available at https://github.com/[repository]
+**Data Availability:** Reference implementation available at https://github.com/crichalchemist/wave-experiment
 
 ---
 
 **For correspondence:** [Contact information]
 
 **Suggested Citation:**
-> Φ(humanity): A Rigorous Ethical-Affective Objective Function. Working Paper v2.0. (2026). Detective LLM Project.
+> Φ(humanity): A Rigorous Ethical-Affective Objective Function. Working Paper v2.1. (2026). Detective LLM Project.
 
 ---
 
