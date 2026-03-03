@@ -1,8 +1,8 @@
 """
 Phi Research Workbench -- Interactive welfare trajectory forecasting + training.
 
-6 tabs: Scenario Explorer, Custom Forecast, Experiment Lab,
-Training (gated), Data Workshop (gated), Research.
+7 tabs: Scenario Explorer, Custom Forecast, Experiment Lab,
+Training (gated), Data Workshop (gated), Research, Entity Network (gated).
 """
 import os
 import numpy as np
@@ -10,6 +10,7 @@ import pandas as pd
 import torch
 import plotly.graph_objects as go
 import gradio as gr
+import spaces
 
 from welfare import (
     compute_phi, ALL_CONSTRUCTS, CONSTRUCT_FLOORS, CONSTRUCT_DISPLAY,
@@ -45,23 +46,34 @@ CONSTRUCT_COLORS = [
 # Inference pipeline
 # ============================================================================
 
-def run_inference(df, model=None):
-    """Full pipeline: DataFrame -> (phi_pred, construct_pred, attention)."""
+def _run_inference_core(df, model=None):
+    """Core inference: DataFrame -> (phi_pred, construct_pred, attention).
+
+    Undecorated so it can be called from within other @spaces.GPU functions
+    (ZeroGPU decorators cannot nest).
+    """
     if model is None:
         model = MODEL
+    device = next(model.parameters()).device
     features = compute_all_signals(df, window=20)
     X_scaled = REFERENCE_SCALER.transform(features[FEATURE_NAMES].values)
     X_window = X_scaled[-SEQ_LEN:]
-    X_tensor = torch.tensor(X_window[np.newaxis], dtype=torch.float32)
+    X_tensor = torch.tensor(X_window[np.newaxis], dtype=torch.float32).to(device)
 
     with torch.no_grad():
         phi_pred, construct_pred, attn_weights = model(X_tensor)
 
     return (
-        phi_pred[0, :, 0].numpy(),
-        construct_pred[0].numpy(),
-        attn_weights[0].numpy(),
+        phi_pred[0, :, 0].cpu().numpy(),
+        construct_pred[0].cpu().numpy(),
+        attn_weights[0].cpu().numpy(),
     )
+
+
+@spaces.GPU(duration=30)
+def run_inference(df, model=None):
+    """GPU-accelerated inference: DataFrame -> (phi_pred, construct_pred, attention)."""
+    return _run_inference_core(df, model=model)
 
 
 # ============================================================================
@@ -256,8 +268,9 @@ def inspect_data(key, scenario, seed):
     return fig_raw, fig_heat, fig_phi, stats
 
 
+@spaces.GPU(duration=60)
 def compare_experiments(scenario, seed, revision_a, revision_b):
-    """Experiment Lab: run same scenario through two checkpoints."""
+    """Experiment Lab: run same scenario through two checkpoints (GPU-accelerated)."""
     rng_a = np.random.default_rng(int(seed))
     df = generate_scenario(scenario, length=200, rng=rng_a)
 
@@ -270,8 +283,8 @@ def compare_experiments(scenario, seed, revision_a, revision_b):
     except Exception as e:
         return None, None, f"Failed to load checkpoint B: {e}"
 
-    phi_a, _, _ = run_inference(df, model=model_a)
-    phi_b, _, _ = run_inference(df, model=model_b)
+    phi_a, _, _ = _run_inference_core(df, model=model_a)
+    phi_b, _, _ = _run_inference_core(df, model=model_b)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(

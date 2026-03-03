@@ -22,6 +22,7 @@ CHECKPOINT_FILE = "phi_forecaster_best.pt"
 SEQ_LEN = 50
 PRED_LEN = 10
 INPUT_SIZE = 36
+INPUT_SIZE_GRAPH = 43  # 36 base + 7 graph topology features
 HIDDEN_SIZE = 256
 
 # ============================================================================
@@ -114,16 +115,28 @@ class PhiForecasterGPU(nn.Module):
 
 
 def load_model(repo_id=MODEL_REPO, filename=CHECKPOINT_FILE, revision=None):
-    """Download checkpoint from Hub and load into PhiForecasterGPU."""
+    """Download checkpoint from Hub and load into PhiForecasterGPU.
+
+    Reads input_size from training_metadata.json when available (supports
+    both 36-feature base and 43-feature graph-enhanced models). Moves model
+    to CUDA when available (ZeroGPU H200).
+    """
     try:
+        meta = load_training_metadata(repo_id=repo_id, revision=revision)
+        input_size = meta.get("input_size", INPUT_SIZE)
+
         path = hf_hub_download(repo_id=repo_id, filename=filename, revision=revision)
         model = PhiForecasterGPU(
-            input_size=INPUT_SIZE, hidden_size=HIDDEN_SIZE,
+            input_size=input_size, hidden_size=HIDDEN_SIZE,
             n_layers=2, pred_len=PRED_LEN,
         )
         state_dict = torch.load(path, map_location="cpu", weights_only=True)
         model.load_state_dict(state_dict, strict=True)
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
         model.eval()
+        logger.info("Model loaded on %s (input_size=%d)", device, input_size)
         return model
     except Exception as e:
         logger.error("Failed to load model from %s/%s (revision=%s): %s", repo_id, filename, revision, e)

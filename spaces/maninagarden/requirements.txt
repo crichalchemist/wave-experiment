@@ -6,3 +6,4 @@ plotly>=5.0.0
 huggingface-hub>=0.25.0
 gradio>=4.0.0
 trackio
+spaces
