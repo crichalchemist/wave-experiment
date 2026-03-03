@@ -364,7 +364,9 @@ def extract_scenarios(corpus_path: str, output: str, length: int) -> None:
               help="Root directory of the epstein-docs dataset.")
 @click.option("--max-pages", type=int, default=None,
               help="Limit the number of pages to process.")
-def ingest_epstein_cmd(root: Path, max_pages: int | None) -> None:
+@click.option("--drop-log", type=click.Path(path_type=Path), default=None,
+              help="Path for JSONL log of filtered entities (e.g. data/entity_drops.jsonl).")
+def ingest_epstein_cmd(root: Path, max_pages: int | None, drop_log: Path | None) -> None:
     """Ingest epstein-docs entities into the knowledge graph."""
     from src.data.graph_store import graph_store_from_env
     from src.data.ingest_epstein import ingest_epstein
@@ -372,9 +374,13 @@ def ingest_epstein_cmd(root: Path, max_pages: int | None) -> None:
     graph = graph_store_from_env()
     click.echo(f"Ingesting from {root} ...")
 
-    stats = ingest_epstein(root, graph, max_pages=max_pages)
+    stats = ingest_epstein(root, graph, max_pages=max_pages, drop_log_path=drop_log)
 
-    click.echo(f"Pages processed: {stats.pages_processed}")
-    click.echo(f"Entities added:  {stats.entities_added}")
-    click.echo(f"Edges created:   {stats.edges_created}")
-    click.echo(f"Skipped:         {stats.skipped}")
+    click.echo(f"Pages processed:     {stats.pages_processed}")
+    click.echo(f"Entities added:      {stats.entities_added}")
+    click.echo(f"Edges created:       {stats.edges_created}")
+    click.echo(f"Skipped:             {stats.skipped}")
+    click.echo(f"Entities dropped:    {stats.entities_dropped}")
+    click.echo(f"Fuzzy mappings added:{stats.fuzzy_mappings_added}")
+    if drop_log:
+        click.echo(f"Drop log:            {drop_log}")

@@ -67,7 +67,7 @@ def epstein_root(tmp_path: Path) -> Path:
         "document_metadata": {"page_number": "2", "document_type": "Court Document"},
         "full_text": "Epstein, Maxwell, and Doe were present.",
         "entities": {
-            "people": ["Jeff Epstein", "Ghislaine Maxwell", "Jane Doe"],
+            "people": ["Jeff Epstein", "Ghislaine Maxwell", "Virginia Giuffre"],
             "organizations": [],
             "locations": [],
             "dates": [],
@@ -156,11 +156,11 @@ class TestIngestion:
         graph = InMemoryGraph()
         ingest_epstein(epstein_root, graph)
 
-        # Page 2 has 3 people: Jeffrey Epstein, Ghislaine Maxwell, Jane Doe
+        # Page 2 has 3 people: Jeffrey Epstein, Ghislaine Maxwell, Virginia Giuffre
         # Should create 3 pairs × 2 directions = 6 CO_MENTIONED edges from that page alone
-        assert graph.get_edge("Jeffrey Epstein", "Jane Doe") is not None
-        assert graph.get_edge("Jane Doe", "Jeffrey Epstein") is not None
-        assert graph.get_edge("Ghislaine Maxwell", "Jane Doe") is not None
+        assert graph.get_edge("Jeffrey Epstein", "Virginia Giuffre") is not None
+        assert graph.get_edge("Virginia Giuffre", "Jeffrey Epstein") is not None
+        assert graph.get_edge("Ghislaine Maxwell", "Virginia Giuffre") is not None
 
     def test_successors_include_connected_entities(self, epstein_root: Path) -> None:
         graph = InMemoryGraph()
@@ -181,3 +181,83 @@ class TestIngestion:
         stats = ingest_epstein(tmp_path, graph)
         assert stats.pages_processed == 0
         assert stats.edges_created == 0
+
+
+# ---------------------------------------------------------------------------
+# Entity filter integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def noisy_epstein_root(tmp_path: Path) -> Path:
+    """Epstein-docs tree with noisy entities to test filtering."""
+    dedupe = {"people": {}, "organizations": {}, "locations": {}}
+    (tmp_path / "dedupe.json").write_text(json.dumps(dedupe))
+    (tmp_path / "analyses.json").write_text(json.dumps({"total": 0, "analyses": []}))
+
+    results_dir = tmp_path / "results" / "IMAGES001"
+    results_dir.mkdir(parents=True)
+
+    page = {
+        "document_metadata": {"page_number": "1", "document_type": "Court Document"},
+        "full_text": "Multiple entities mentioned in this document.",
+        "entities": {
+            "people": [
+                "Jeffrey Epstein",
+                "Ghislaine Maxwell",
+                "(b)(6)",             # Layer 1: FOIA code
+                "Inmate 7",          # Layer 3: inmate pattern
+                "D",                 # Layer 1: too short
+                "defendants",        # Layer 3: role prefix
+                "user@aol.com",      # Layer 1: email
+            ],
+            "organizations": ["DOJ", "[REDACTED]"],  # Layer 1: bracket-redacted
+            "locations": [],
+            "dates": [],
+        },
+    }
+    (results_dir / "PAGE-001.json").write_text(json.dumps(page))
+
+    return tmp_path
+
+
+class TestFilteredIngestion:
+    def test_junk_entities_not_in_graph(self, noisy_epstein_root: Path) -> None:
+        graph = InMemoryGraph()
+        stats = ingest_epstein(noisy_epstein_root, graph)
+
+        nodes = graph.nodes()
+        assert "Jeffrey Epstein" in nodes
+        assert "Ghislaine Maxwell" in nodes
+        assert "(b)(6)" not in nodes
+        assert "Inmate 7" not in nodes
+        assert "D" not in nodes
+        assert "defendants" not in nodes
+        assert "user@aol.com" not in nodes
+        assert "[REDACTED]" not in nodes
+        assert stats.entities_dropped > 0
+
+    def test_drop_log_written(self, noisy_epstein_root: Path, tmp_path: Path) -> None:
+        drop_log = tmp_path / "drops.jsonl"
+        graph = InMemoryGraph()
+        ingest_epstein(noisy_epstein_root, graph, drop_log_path=drop_log)
+
+        assert drop_log.exists()
+        lines = drop_log.read_text().strip().split("\n")
+        assert len(lines) >= 5  # at least 5 noisy entities
+        # Verify JSONL format
+        for line in lines:
+            entry = json.loads(line)
+            assert "entity" in entry
+            assert "reason" in entry
+            assert "category" in entry
+
+    def test_backward_compatible_without_drop_log(self, noisy_epstein_root: Path) -> None:
+        """Ingestion works without drop_log_path (backward compatible)."""
+        graph = InMemoryGraph()
+        stats = ingest_epstein(noisy_epstein_root, graph)
+
+        assert isinstance(stats, IngestionStats)
+        assert stats.pages_processed >= 1
+        assert stats.entities_dropped > 0
+        assert stats.fuzzy_mappings_added >= 0

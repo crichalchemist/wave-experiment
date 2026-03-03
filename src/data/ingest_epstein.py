@@ -15,6 +15,7 @@ from itertools import combinations
 from pathlib import Path
 
 from src.core.types import RelationType
+from src.data.entity_filter import DropLog, build_fuzzy_mappings, filter_entities
 from src.data.epstein_adapter import (
     EpsteinAnalysis,
     iter_pages,
@@ -38,6 +39,8 @@ class IngestionStats:
     entities_added: int
     edges_created: int
     skipped: int
+    entities_dropped: int = 0
+    fuzzy_mappings_added: int = 0
 
 
 def _has_bulk(graph: GraphStore) -> bool:
@@ -56,13 +59,16 @@ def ingest_epstein(
     root: Path,
     graph: GraphStore,
     max_pages: int | None = None,
+    drop_log_path: Path | None = None,
 ) -> IngestionStats:
     """Populate *graph* with entity relationships from epstein-docs.
 
     Strategy:
+    0. (Layer 2) Fuzzy dedup pre-pass — collect raw entity names, build
+       new variant→canonical mappings, merge into ``people_map``.
     1. Load dedup mappings and analyses.
-    2. Iterate pages; for each page with >= 2 people, create
-       **CO_MENTIONED** edges between all person-person pairs (confidence 0.5).
+    2. Iterate pages; apply Layer 1+3 entity filter, then for each page
+       with >= 2 clean people, create **CO_MENTIONED** edges (confidence 0.5).
     3. For each analysis with key_people, create **ASSOCIATED** edges between
        all key-person pairs (confidence 0.8).
     4. Skip pages with empty full_text or no people.
@@ -76,6 +82,23 @@ def ingest_epstein(
     people_map = mappings.get("people", {})
     analyses = load_analyses(root)
 
+    # --- Layer 2: fuzzy dedup pre-pass ---
+    raw_entities: list[str] = []
+    for page in iter_pages(root, mappings):
+        raw_entities.extend(page.people)
+    unique_raw = list(set(raw_entities))
+    fuzzy_new = build_fuzzy_mappings(unique_raw, people_map)
+    people_map.update(fuzzy_new)
+    fuzzy_mappings_added = len(fuzzy_new)
+    if fuzzy_new:
+        logger.info("Fuzzy dedup added %d new mappings", fuzzy_mappings_added)
+
+    # Rebuild mappings dict with augmented people_map for iter_pages
+    augmented_mappings = {**mappings, "people": people_map}
+
+    # Set up drop log for Layer 1+3
+    drop_log = DropLog(drop_log_path) if drop_log_path else None
+
     use_bulk = _has_bulk(graph)
     edge_buffer: list[tuple[str, str, RelationType, float]] = []
 
@@ -83,9 +106,10 @@ def ingest_epstein(
     edges_created = 0
     pages_processed = 0
     skipped = 0
+    entities_dropped = 0
 
     # --- Phase 1: page-level co-mentions ---
-    for page in iter_pages(root, mappings):
+    for page in iter_pages(root, augmented_mappings):
         if max_pages is not None and pages_processed >= max_pages:
             break
 
@@ -94,12 +118,22 @@ def ingest_epstein(
             continue
 
         pages_processed += 1
-        entities_seen.update(page.people)
-        entities_seen.update(page.organizations)
-        entities_seen.update(page.locations)
+
+        # Apply Layer 1 + Layer 3 entity filter
+        clean_people = filter_entities(list(page.people), drop_log=drop_log)
+        clean_orgs = filter_entities(list(page.organizations), drop_log=drop_log)
+        clean_locs = filter_entities(list(page.locations), drop_log=drop_log)
+
+        pre_filter_count = len(page.people) + len(page.organizations) + len(page.locations)
+        post_filter_count = len(clean_people) + len(clean_orgs) + len(clean_locs)
+        entities_dropped += pre_filter_count - post_filter_count
+
+        entities_seen.update(clean_people)
+        entities_seen.update(clean_orgs)
+        entities_seen.update(clean_locs)
 
         # Person-person co-mention edges (all unique pairs)
-        for a, b in combinations(sorted(p for p in set(page.people) if p), 2):
+        for a, b in combinations(sorted(p for p in set(clean_people) if p), 2):
             if use_bulk:
                 edge_buffer.append((a, b, RelationType.CO_MENTIONED, 0.5))
                 edge_buffer.append((b, a, RelationType.CO_MENTIONED, 0.5))
@@ -120,7 +154,8 @@ def ingest_epstein(
             continue
 
         names = [normalize(name, people_map) for name, _role in analysis.key_people]
-        unique_names = sorted(n for n in set(names) if n)
+        clean_names = filter_entities(names, drop_log=drop_log)
+        unique_names = sorted(n for n in set(clean_names) if n)
         entities_seen.update(unique_names)
 
         for a, b in combinations(unique_names, 2):
@@ -140,4 +175,6 @@ def ingest_epstein(
         entities_added=len(entities_seen),
         edges_created=edges_created,
         skipped=skipped,
+        entities_dropped=entities_dropped,
+        fuzzy_mappings_added=fuzzy_mappings_added,
     )
