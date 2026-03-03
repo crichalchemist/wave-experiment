@@ -10,7 +10,18 @@ import pandas as pd
 import torch
 import plotly.graph_objects as go
 import gradio as gr
-import spaces
+
+try:
+    import spaces
+except ImportError:
+    # No-op decorator for local development (spaces is pre-installed on ZeroGPU)
+    class _SpacesMock:
+        @staticmethod
+        def GPU(duration=30):
+            def decorator(fn):
+                return fn
+            return decorator
+    spaces = _SpacesMock()
 
 from welfare import (
     compute_phi, ALL_CONSTRUCTS, CONSTRUCT_FLOORS, CONSTRUCT_DISPLAY,
