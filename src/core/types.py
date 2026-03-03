@@ -17,6 +17,8 @@ class RelationType(Enum):
     CAUSAL = "causal"               # A directly causes B
     INSTANTIATIVE = "instantiative" # B is a specific instance of A
     SEQUENTIAL = "sequential"       # B occurs chronologically after A
+    CO_MENTIONED = "co_mentioned"   # Entities appear in same document
+    ASSOCIATED = "associated"       # Person linked to org/location by role
 
 
 class AssumptionType(Enum):

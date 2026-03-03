@@ -13,7 +13,9 @@ KnowledgeGraph = nx.DiGraph
 _HOP_DECAY: dict[RelationType, float] = {
     RelationType.CAUSAL: 0.7,
     RelationType.CONDITIONAL: 0.75,
+    RelationType.CO_MENTIONED: 0.6,
     RelationType.INSTANTIATIVE: 0.85,
+    RelationType.ASSOCIATED: 0.8,
     RelationType.SEQUENTIAL: 0.9,
 }
 
