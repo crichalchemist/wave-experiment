@@ -1,3 +1,7 @@
+> **SUPERSEDED**: This document describes the v1.0 Phi integration state from 2026-02-19.
+> The current state uses v2.1 with 8 constructs, 4-weight scoring, and recovery floors.
+> See CLAUDE.md and ADR-009 through ADR-012 for current architecture.
+
 # Φ(humanity) Integration - Deployment Summary
 
 **Date:** 2026-02-19

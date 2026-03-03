@@ -1,7 +1,7 @@
 ---
 id: ADR-008
 title: Persistent graph store (replacing networkx in-memory copy-on-write)
-status: proposed
+status: accepted
 date: 2026-02-17
 tags: [architecture, graph, persistence, neo4j, kuzu]
 ---

@@ -61,5 +61,5 @@ When analyzing legal claims, the system must ask: *from whose position is this a
 ## Files
 
 - `src/core/types.py` — add `LegalDomain` enum
-- `docs/constitution.md` — add legal grounding section (to be added)
+- `docs/constitution.md` — legal grounding section (lex_glue scotus dataset used for warmup; 232 DPO pairs generated)
 - `docs/vault/decisions/ADR-007-legal-grounding.md` — this document
