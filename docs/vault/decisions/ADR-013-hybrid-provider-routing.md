@@ -42,7 +42,7 @@ sudo docker run -d \
   vllm/vllm-openai-cpu:latest-x86_64 \
   --model deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B \
   --dtype float32 \
-  --max-model-len 2048 \
+  --max-model-len 4096 \
   --host 0.0.0.0 --port 8000
 ```
 
