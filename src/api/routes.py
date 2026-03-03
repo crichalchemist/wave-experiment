@@ -174,7 +174,7 @@ def create_app(
     # ------------------------------------------------------------------
 
     @app.post("/evolve", response_model=EvolveResponse)
-    def evolve_endpoint(request: EvolveRequest) -> EvolveResponse:  # type: ignore[name-defined]
+    async def evolve_endpoint(request: EvolveRequest) -> EvolveResponse:  # type: ignore[name-defined]
         """
         Evolve a fresh hypothesis against the supplied evidence text.
 
@@ -193,18 +193,16 @@ def create_app(
             confidence=_INITIAL_HYPOTHESIS_CONFIDENCE,
         )
 
-        # Use asyncio.run to call async evolve_parallel
-        import asyncio
         from src.detective.parallel_evolution import evolve_parallel
 
-        results = asyncio.run(evolve_parallel(
+        results = await evolve_parallel(
             hypothesis=base,
             evidence_list=[request.evidence_path],
             provider=_provider,
             k=1,
             library=EMPTY_LIBRARY,
             phi_metrics=request.phi_metrics,
-        ))
+        )
 
         if results:
             evolved = results[0].hypothesis
