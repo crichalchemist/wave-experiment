@@ -194,6 +194,37 @@ class AzureFoundryProvider:
         raise NotImplementedError(_AZURE_EMBED_NOT_SUPPORTED)
 
 
+@dataclass
+class HybridRoutingProvider:
+    """Routes scoring prompts to a local model and reasoning prompts to Azure.
+
+    Uses classify_prompt() to inspect prompt text. Circuit-breaker: if the
+    scoring provider fails once, all subsequent calls fall back to the
+    reasoning provider until reset_fallback() is called.
+    """
+    scoring_provider: OllamaProvider
+    reasoning_provider: AzureFoundryProvider
+    _ollama_available: bool = field(default=True, init=False, repr=False)
+
+    def complete(self, prompt: str, **kwargs) -> str:
+        route = classify_prompt(prompt)
+        if route == "scoring" and self._ollama_available:
+            try:
+                return self.scoring_provider.complete(prompt, **kwargs)
+            except Exception as exc:
+                _logger.warning("Ollama failed (%s), falling back to Azure", exc)
+                self._ollama_available = False
+                return self.reasoning_provider.complete(prompt, **kwargs)
+        return self.reasoning_provider.complete(prompt, **kwargs)
+
+    def embed(self, text: str) -> list[float]:
+        raise NotImplementedError("HybridRoutingProvider does not support embeddings")
+
+    def reset_fallback(self) -> None:
+        """Re-enable scoring provider after Ollama recovery."""
+        self._ollama_available = True
+
+
 def critic_provider_from_env() -> "AzureFoundryProvider":
     """Load Azure Foundry critic from AZURE_CRITIC_* env vars.
 

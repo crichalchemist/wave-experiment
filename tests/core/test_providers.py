@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from src.core.providers import (
     AzureFoundryProvider,
+    HybridRoutingProvider,
     MockProvider,
     ModelProvider,
     OllamaProvider,
@@ -198,6 +199,64 @@ def test_azure_provider_embed_raises() -> None:
     )
     with pytest.raises(NotImplementedError):
         provider.embed("text")
+
+
+# --- HybridRoutingProvider tests ---
+
+
+class TestHybridRoutingProvider:
+    def _make_hybrid(self, scoring_response="0.75", reasoning_response="detailed analysis") -> HybridRoutingProvider:
+        scoring = MockProvider(response=scoring_response)
+        reasoning = MockProvider(response=reasoning_response)
+        # Use MockProvider as stand-ins — HybridRoutingProvider only calls .complete()
+        return HybridRoutingProvider(
+            scoring_provider=scoring,  # type: ignore[arg-type]
+            reasoning_provider=reasoning,  # type: ignore[arg-type]
+        )
+
+    def test_hybrid_satisfies_protocol(self) -> None:
+        hybrid = self._make_hybrid()
+        assert isinstance(hybrid, ModelProvider)
+
+    def test_scoring_prompt_routes_to_scoring_provider(self) -> None:
+        hybrid = self._make_hybrid()
+        result = hybrid.complete("Reply with ONLY: score: <float>")
+        assert result == "0.75"
+
+    def test_reasoning_prompt_routes_to_reasoning_provider(self) -> None:
+        hybrid = self._make_hybrid()
+        result = hybrid.complete("Analyze the following evidence and explain step-by-step")
+        assert result == "detailed analysis"
+
+    def test_scoring_fallback_on_exception(self) -> None:
+        hybrid = self._make_hybrid()
+        # Make scoring provider raise
+        hybrid.scoring_provider.complete = MagicMock(side_effect=ConnectionError("Ollama down"))  # type: ignore[assignment]
+        result = hybrid.complete("Reply with ONLY: score: <float>")
+        assert result == "detailed analysis"  # fell back to reasoning
+
+    def test_circuit_breaker_stays_open_after_failure(self) -> None:
+        hybrid = self._make_hybrid()
+        hybrid.scoring_provider.complete = MagicMock(side_effect=ConnectionError("Ollama down"))  # type: ignore[assignment]
+        hybrid.complete("Reply with ONLY: score: <float>")  # triggers fallback
+
+        # Now scoring should NOT be attempted — goes straight to reasoning
+        hybrid.scoring_provider.complete = MagicMock(return_value="should not be called")  # type: ignore[assignment]
+        result = hybrid.complete("Reply with ONLY: score: <float>")
+        hybrid.scoring_provider.complete.assert_not_called()
+        assert result == "detailed analysis"
+
+    def test_reset_fallback_re_enables_scoring(self) -> None:
+        hybrid = self._make_hybrid()
+        hybrid._ollama_available = False
+        hybrid.reset_fallback()
+        result = hybrid.complete("Reply with ONLY: score: <float>")
+        assert result == "0.75"
+
+    def test_embed_raises(self) -> None:
+        hybrid = self._make_hybrid()
+        with pytest.raises(NotImplementedError):
+            hybrid.embed("text")
 
 
 # --- provider_from_env tests ---
