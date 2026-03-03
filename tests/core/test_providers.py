@@ -292,3 +292,39 @@ def test_provider_from_env_raises_when_not_set(monkeypatch) -> None:
     monkeypatch.delenv("DETECTIVE_PROVIDER", raising=False)
     with pytest.raises(ValueError, match="DETECTIVE_PROVIDER is not set"):
         provider_from_env()
+
+
+def test_provider_from_env_returns_ollama(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTIVE_PROVIDER", "ollama")
+    with patch("src.core.providers._OpenAI"):
+        p = provider_from_env()
+    assert isinstance(p, OllamaProvider)
+    assert p.model == "qwen2.5:0.5b"
+
+
+def test_provider_from_env_returns_ollama_with_custom_url(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTIVE_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-box:11434/v1")
+    monkeypatch.setenv("OLLAMA_MODEL", "llama3.2:1b")
+    with patch("src.core.providers._OpenAI"):
+        p = provider_from_env()
+    assert isinstance(p, OllamaProvider)
+    assert p.base_url == "http://gpu-box:11434/v1"
+    assert p.model == "llama3.2:1b"
+
+
+def test_provider_from_env_returns_hybrid(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTIVE_PROVIDER", "hybrid")
+    monkeypatch.setenv("AZURE_ENDPOINT", "https://example.azure.com")
+    monkeypatch.setenv("AZURE_API_KEY", "key")
+    monkeypatch.setenv("AZURE_MODEL", "claude-haiku-4-5")
+    with patch("src.core.providers._OpenAI"):
+        p = provider_from_env()
+    assert isinstance(p, HybridRoutingProvider)
+    assert isinstance(p.reasoning_provider, AzureFoundryProvider)
+
+
+def test_provider_from_env_error_lists_all_options(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTIVE_PROVIDER", "bogus")
+    with pytest.raises(ValueError, match="hybrid"):
+        provider_from_env()

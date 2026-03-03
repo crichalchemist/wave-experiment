@@ -249,11 +249,12 @@ def critic_provider_from_env() -> "AzureFoundryProvider":
 
 
 def provider_from_env() -> ModelProvider:
-    """Select provider from environment. DETECTIVE_PROVIDER=vllm|azure."""
+    """Select provider from environment. DETECTIVE_PROVIDER=vllm|azure|ollama|hybrid."""
     provider_type = os.environ.get(_ENV_PROVIDER)
     if provider_type is None:
         raise ValueError(
-            f"{_ENV_PROVIDER} is not set. Must be one of: {_PROVIDER_VLLM!r}, {_PROVIDER_AZURE!r}"
+            f"{_ENV_PROVIDER} is not set. Must be one of: "
+            f"{_PROVIDER_VLLM!r}, {_PROVIDER_AZURE!r}, {_PROVIDER_OLLAMA!r}, {_PROVIDER_HYBRID!r}"
         )
     if provider_type == _PROVIDER_VLLM:
         base_url = os.environ[_ENV_VLLM_URL]
@@ -264,4 +265,23 @@ def provider_from_env() -> ModelProvider:
         api_key = os.environ[_ENV_AZURE_KEY]
         model = os.environ[_ENV_AZURE_MODEL]
         return AzureFoundryProvider(endpoint=endpoint, api_key=api_key, model=model)
-    raise ValueError(f"Unknown provider type {provider_type!r}. Set {_ENV_PROVIDER}=vllm|azure")
+    elif provider_type == _PROVIDER_OLLAMA:
+        base_url = os.environ.get(_ENV_OLLAMA_URL, "http://localhost:11434/v1")
+        model = os.environ.get(_ENV_OLLAMA_MODEL, "qwen2.5:0.5b")
+        return OllamaProvider(base_url=base_url, model=model)
+    elif provider_type == _PROVIDER_HYBRID:
+        # Scoring → local Ollama, reasoning → Azure Foundry
+        ollama_url = os.environ.get(_ENV_OLLAMA_URL, "http://localhost:11434/v1")
+        ollama_model = os.environ.get(_ENV_OLLAMA_MODEL, "qwen2.5:0.5b")
+        scoring = OllamaProvider(base_url=ollama_url, model=ollama_model)
+        azure_endpoint = os.environ[_ENV_AZURE_ENDPOINT]
+        azure_key = os.environ[_ENV_AZURE_KEY]
+        azure_model = os.environ[_ENV_AZURE_MODEL]
+        reasoning = AzureFoundryProvider(
+            endpoint=azure_endpoint, api_key=azure_key, model=azure_model
+        )
+        return HybridRoutingProvider(scoring_provider=scoring, reasoning_provider=reasoning)
+    raise ValueError(
+        f"Unknown provider type {provider_type!r}. "
+        f"Set {_ENV_PROVIDER}=vllm|azure|ollama|hybrid"
+    )
