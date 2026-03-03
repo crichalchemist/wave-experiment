@@ -139,6 +139,8 @@ def create_app(
         allow_origins=[
             "https://www.crichalchemist.com",
             "https://crichalchemist.com",
+            "https://crichalchemist-maninagarden.hf.space",
+            "http://localhost:7860",
         ],
         allow_methods=["GET"],
         allow_headers=["*"],
@@ -291,6 +293,40 @@ def create_app(
             _event_generator(),
             media_type="text/event-stream",
         )
+
+    # ------------------------------------------------------------------
+    # GET /graph/export — full graph for space visualization
+    # ------------------------------------------------------------------
+
+    @app.get("/graph/export")
+    def graph_export() -> dict:
+        """
+        Export the full knowledge graph as nodes + edges for visualization.
+
+        Designed for the HF Space Entity Network Explorer tab. Returns
+        all nodes, all edges with relation type and confidence, and
+        summary statistics.
+        """
+        nodes = _graph.nodes()
+        edges = []
+        for node in nodes:
+            for target in _graph.successors(node):
+                edge = _graph.get_edge(node, target)
+                if edge:
+                    edges.append({
+                        "source": edge.source,
+                        "target": edge.target,
+                        "relation": edge.relation.value,
+                        "confidence": edge.confidence,
+                    })
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "stats": {
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+            },
+        }
 
     return app
 
