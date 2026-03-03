@@ -68,6 +68,9 @@ Thumbs.db
 .claude/
 **/CLAUDE.md
 
+# Git worktrees
+.worktrees/
+
 # Node modules (if any)
 node_modules/
 package-lock.json
