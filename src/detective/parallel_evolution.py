@@ -103,8 +103,6 @@ async def evolve_parallel(
     k: int = 3,
     library: ExperienceLibrary = (),
     phi_metrics: dict[str, float] | None = None,
-    alpha: float = 0.7,
-    beta: float = 0.3,
 ) -> list[ParallelEvolutionResult]:
     """
     GoT Generate(k): dispatch k parallel hypothesis branches with welfare-aware scoring.
@@ -121,8 +119,6 @@ async def evolve_parallel(
         library: Optional experience library for context.
         phi_metrics: Current Φ construct levels (for welfare scoring).
                      If None, welfare scoring is skipped (backward compatible).
-        alpha: Weight for epistemic confidence in combined score.
-        beta: Weight for welfare relevance in combined score.
 
     Returns:
         List of ParallelEvolutionResult, sorted by combined_score descending.
