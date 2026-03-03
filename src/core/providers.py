@@ -15,12 +15,16 @@ _AZURE_EMBED_NOT_SUPPORTED: str = "AzureFoundryProvider does not support embeddi
 
 _PROVIDER_VLLM: str = "vllm"
 _PROVIDER_AZURE: str = "azure"
+_PROVIDER_HYBRID: str = "hybrid"
+_PROVIDER_OLLAMA: str = "ollama"
 _ENV_PROVIDER: str = "DETECTIVE_PROVIDER"
 _ENV_VLLM_URL: str = "VLLM_BASE_URL"
 _ENV_VLLM_MODEL: str = "VLLM_MODEL"
 _ENV_AZURE_ENDPOINT: str = "AZURE_ENDPOINT"
 _ENV_AZURE_KEY: str = "AZURE_API_KEY"
 _ENV_AZURE_MODEL: str = "AZURE_MODEL"
+_ENV_OLLAMA_URL: str = "OLLAMA_BASE_URL"
+_ENV_OLLAMA_MODEL: str = "OLLAMA_MODEL"
 
 # Critic provider — separate from the main inference provider.
 # Used in the CAI critique loop (constitutional warmup, preference pair generation).
@@ -75,6 +79,44 @@ class VLLMProvider:
         content = response.choices[0].message.content
         if content is None:
             raise ValueError(f"vLLM returned no content for model {self.model!r}")
+        return content
+
+    def embed(self, text: str) -> list[float]:
+        response = self._client.embeddings.create(model=self.model, input=text)
+        return response.data[0].embedding
+
+
+@dataclass(frozen=True)
+class OllamaProvider:
+    """Connects to a local Ollama instance (OpenAI-compatible API).
+
+    Designed for lightweight scoring prompts on small models (e.g. qwen2.5:0.5b).
+    Uses a 30s timeout to fail fast — if Ollama is slow, callers should fall back
+    to a cloud provider rather than block.
+    """
+    base_url: str = "http://localhost:11434/v1"
+    model: str = "qwen2.5:0.5b"
+    temperature: float = 0.0
+    _client: Any = field(default=None, init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if _OpenAI is None:
+            raise ImportError("openai package required for OllamaProvider")
+        object.__setattr__(self, "_client", _OpenAI(
+            base_url=self.base_url,
+            api_key=_VLLM_DUMMY_API_KEY,  # Ollama ignores this but OpenAI client requires it
+            timeout=30.0,  # fail fast — scoring prompts are simple
+        ))
+
+    def complete(self, prompt: str, **kwargs) -> str:
+        response = self._client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=kwargs.get("temperature", self.temperature),
+        )
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError(f"Ollama returned no content for model {self.model!r}")
         return content
 
     def embed(self, text: str) -> list[float]:

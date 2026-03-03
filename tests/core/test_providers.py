@@ -6,6 +6,7 @@ from src.core.providers import (
     AzureFoundryProvider,
     MockProvider,
     ModelProvider,
+    OllamaProvider,
     VLLMProvider,
     provider_from_env,
 )
@@ -64,6 +65,46 @@ def test_vllm_provider_raises_on_missing_openai() -> None:
     with patch("src.core.providers._OpenAI", None):
         with pytest.raises(ImportError, match="openai package required"):
             VLLMProvider(base_url="http://localhost:8000/v1", model="mistral")
+
+
+# --- OllamaProvider tests ---
+
+
+def test_ollama_provider_satisfies_protocol() -> None:
+    with patch("src.core.providers._OpenAI"):
+        provider = OllamaProvider()
+    assert isinstance(provider, ModelProvider)
+
+
+def test_ollama_provider_defaults() -> None:
+    with patch("src.core.providers._OpenAI"):
+        provider = OllamaProvider()
+    assert provider.model == "qwen2.5:0.5b"
+    assert provider.base_url == "http://localhost:11434/v1"
+
+
+def test_ollama_provider_complete_calls_chat_completions() -> None:
+    with patch("src.core.providers._OpenAI"):
+        provider = OllamaProvider()
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = "0.85"
+    object.__setattr__(provider, "_client", mock_client)
+
+    output = provider.complete("Reply with ONLY: score: <float>")
+
+    mock_client.chat.completions.create.assert_called_once_with(
+        model="qwen2.5:0.5b",
+        messages=[{"role": "user", "content": "Reply with ONLY: score: <float>"}],
+        temperature=0.0,
+    )
+    assert output == "0.85"
+
+
+def test_ollama_provider_raises_on_missing_openai() -> None:
+    with patch("src.core.providers._OpenAI", None):
+        with pytest.raises(ImportError, match="openai package required"):
+            OllamaProvider()
 
 
 # --- AzureFoundryProvider tests ---
