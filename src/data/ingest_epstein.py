@@ -75,7 +75,7 @@ def ingest_epstein(
         entities_seen.update(page.locations)
 
         # Person-person co-mention edges (all unique pairs)
-        for a, b in combinations(sorted(set(page.people)), 2):
+        for a, b in combinations(sorted(p for p in set(page.people) if p), 2):
             graph.add_edge(a, b, RelationType.CO_MENTIONED, confidence=0.5)
             graph.add_edge(b, a, RelationType.CO_MENTIONED, confidence=0.5)
             edges_created += 2
@@ -106,7 +106,7 @@ def _ingest_analysis_edges(
             continue
 
         names = [normalize(name, people_map) for name, _role in analysis.key_people]
-        unique_names = sorted(set(names))
+        unique_names = sorted(n for n in set(names) if n)
         entities_seen.update(unique_names)
 
         for a, b in combinations(unique_names, 2):
@@ -124,6 +124,6 @@ def _count_analysis_edges(
         if len(analysis.key_people) < 2:
             continue
         names = [normalize(name, people_map) for name, _role in analysis.key_people]
-        n = len(set(names))
+        n = len(set(n for n in names if n))
         total += n * (n - 1)  # bidirectional pairs
     return total
