@@ -7,7 +7,7 @@ welfare relevance via Phi gradients.
 Uses semantic classifier (DistilBERT) as primary method with keyword
 fallback when the model is not yet trained.
 """
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 import logging
 import math
 
@@ -243,33 +243,47 @@ def divergence_penalty(metrics: Dict[str, float]) -> float:
     return MU * sq_sum / len(PENALTY_PAIRS)
 
 
-def compute_phi(metrics: Dict[str, float]) -> float:
+def compute_phi(
+    metrics: Dict[str, float],
+    derivatives: Optional[Dict[str, float]] = None,
+) -> float:
     """
-    Compute Phi(humanity) — the full welfare function.
+    Compute Phi(humanity) — the full welfare function (v2.1).
 
-    Phi = f(lam_L) * product(x_tilde_i^w_i) * Psi_ubuntu * (1 - Psi_penalty)
+    Phi = f(lam_L) * product(x_tilde_i ^ w_i) * Psi_ubuntu * (1 - Psi_penalty)
 
-    Components:
-        - f(lam_L): Community solidarity multiplier (Ubuntu substrate)
-        - product(x_tilde_i^w_i): Equity-weighted geometric mean (Western capability)
-        - Psi_ubuntu: Paired construct synergy (relational welfare)
-        - Psi_penalty: Divergence penalty (structural distortion detection)
+    v2.1: recovery_aware_input() is called for each construct before the
+    weighted geometric mean. Synergy and penalty still operate on raw
+    metrics (they detect actual state).
+
+    Args:
+        metrics: Dict mapping each construct symbol to a value in [0, 1].
+        derivatives: Optional dict of dx/dt per construct. Defaults to 0.0.
     """
-    lam_L = max(0.01, metrics.get("lam_L", 0.5))
+    if derivatives is None:
+        derivatives = {}
 
-    # Community multiplier
-    f_lam = community_multiplier(lam_L)
+    lam_L_raw = max(0.01, metrics.get("lam_L", 0.5))
+    f_lam = community_multiplier(lam_L_raw)
 
-    # Equity weights
-    weights = equity_weights(metrics)
+    # Recovery-aware effective values
+    effective: Dict[str, float] = {}
+    for c in ALL_CONSTRUCTS:
+        x_raw = max(0.01, metrics.get(c, 0.5))
+        floor_c = CONSTRUCT_FLOORS[c]
+        dx_dt_c = derivatives.get(c, 0.0)
+        effective[c] = recovery_aware_input(x_raw, floor_c, dx_dt_c, lam_L_raw)
 
-    # Weighted geometric mean of construct values
+    # Equity weights on effective values
+    weights = equity_weights(effective)
+
+    # Weighted geometric mean of effective values
     product = 1.0
     for c in ALL_CONSTRUCTS:
-        x = max(0.01, metrics.get(c, 0.5))
-        product *= x ** weights[c]
+        x_eff = max(0.01, effective[c])
+        product *= x_eff ** weights[c]
 
-    # Synergy and penalty
+    # Synergy and penalty on RAW metrics
     synergy = ubuntu_synergy(metrics)
     penalty = divergence_penalty(metrics)
 

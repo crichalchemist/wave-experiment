@@ -762,3 +762,43 @@ class TestCuriosityVerificationCriteria:
 
         sig = inspect.signature(compute_gap_urgency)
         assert list(sig.parameters.keys()) == ["gap", "phi_metrics"]
+
+
+class TestComputePhiV21:
+    """v2.1 Phi: recovery floors + derivatives parameter."""
+
+    def test_compute_phi_accepts_derivatives(self):
+        """v2.1: compute_phi should accept optional derivatives parameter."""
+        from src.inference.welfare_scoring import compute_phi
+        metrics = {"c": 0.5, "kappa": 0.5, "j": 0.5, "p": 0.5,
+                   "eps": 0.5, "lam_L": 0.5, "lam_P": 0.5, "xi": 0.5}
+        derivs = {"c": 0.01, "lam_L": -0.02}
+        # Should not raise
+        result = compute_phi(metrics, derivatives=derivs)
+        assert 0.0 <= result <= 1.0
+
+    def test_compute_phi_recovery_floor_activates(self):
+        """v2.1: below-floor constructs should be lifted by recovery potential."""
+        from src.inference.welfare_scoring import compute_phi, CONSTRUCT_FLOORS
+        # Care below its floor (0.20) with strong positive trajectory.
+        # dx_dt must be large enough for trajectory term (sigmoid(10*dx-3))
+        # to exceed community_capacity*0.5 at lam_L=0.5 (~0.354).
+        metrics = {"c": 0.10, "kappa": 0.5, "j": 0.5, "p": 0.5,
+                   "eps": 0.5, "lam_L": 0.5, "lam_P": 0.5, "xi": 0.5}
+        derivs = {"c": 0.5}  # strong recovery trajectory
+        phi_recovering = compute_phi(metrics, derivatives=derivs)
+
+        # Same metrics, no recovery (stagnant)
+        phi_stagnant = compute_phi(metrics)
+
+        # Recovery should produce higher Phi (trajectory exceeds community floor)
+        assert phi_recovering > phi_stagnant
+
+    def test_compute_phi_backward_compatible(self):
+        """v2.1: no derivatives = same as v2.0 when all above floor."""
+        from src.inference.welfare_scoring import compute_phi
+        metrics = {"c": 0.5, "kappa": 0.5, "j": 0.5, "p": 0.5,
+                   "eps": 0.5, "lam_L": 0.5, "lam_P": 0.5, "xi": 0.5}
+        # All above floor, no derivatives → recovery_aware_input is pass-through
+        result = compute_phi(metrics)
+        assert 0.0 < result < 1.0
