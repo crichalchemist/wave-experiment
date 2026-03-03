@@ -1,5 +1,5 @@
 """
-FastAPI application with three analysis endpoints.
+FastAPI application with analysis + trace streaming endpoints.
 
 Data minimization is a first-class constraint: every response model
 exposes only the fields the client strictly needs, no more.
@@ -18,14 +18,21 @@ to avoid shared state between test runs.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+from dataclasses import asdict
+
 try:
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Query
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import StreamingResponse
     from pydantic import BaseModel
 except ImportError:
     FastAPI = None  # type: ignore[assignment,misc]
     BaseModel = None  # type: ignore[assignment]
 
 from src.core.providers import MockProvider, ModelProvider, provider_from_env
+from src.core.trace_store import TraceStore
 from src.data.graph_store import GraphStore, graph_store_from_env
 from src.detective.experience import EMPTY_LIBRARY
 from src.detective.evolution import evolve_hypothesis
@@ -92,6 +99,7 @@ else:
 def create_app(
     graph: "GraphStore | None" = None,
     provider: "ModelProvider | None" = None,
+    trace_store: "TraceStore | None" = None,
 ) -> "FastAPI":  # type: ignore[name-defined]
     """
     Build and return the FastAPI application instance.
@@ -100,12 +108,14 @@ def create_app(
     tests to create isolated instances and avoids shared global state between
     test runs.
 
-    graph:    optional pre-built GraphStore.  When None, graph_store_from_env()
-              is called once at app-creation time.
-    provider: optional ModelProvider.  When None, provider_from_env() is tried
-              first; falls back to MockProvider when env vars are not configured
-              (safe for tests and local dev without a running Ollama instance).
-    All route handlers share the same provider instance via closure.
+    graph:      optional pre-built GraphStore.  When None, graph_store_from_env()
+                is called once at app-creation time.
+    provider:   optional ModelProvider.  When None, provider_from_env() is tried
+                first; falls back to MockProvider when env vars are not configured
+                (safe for tests and local dev without a running Ollama instance).
+    trace_store: optional TraceStore.  When provided, enables /traces/* endpoints
+                for SSE streaming, recent queries, and JSONL history.
+    All route handlers share the same provider/store instances via closure.
     """
     if FastAPI is None:
         raise ImportError("fastapi is required to create the Detective LLM API app.")
@@ -120,7 +130,19 @@ def create_app(
         except (ValueError, KeyError, ImportError):
             _provider = MockProvider(response=_API_MOCK_RESPONSE)
 
+    _trace_store = trace_store
+
     app = FastAPI(title=API_TITLE, version=API_VERSION)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "https://www.crichalchemist.com",
+            "https://crichalchemist.com",
+        ],
+        allow_methods=["GET"],
+        allow_headers=["*"],
+    )
 
     # ------------------------------------------------------------------
     # POST /analyze
@@ -214,6 +236,60 @@ def create_app(
             hypothesis_id=evolved.id,
             statement=evolved.text,
             confidence=evolved.confidence,
+        )
+
+    # ------------------------------------------------------------------
+    # GET /traces/recent — last N traces from in-memory deque
+    # ------------------------------------------------------------------
+
+    @app.get("/traces/recent")
+    def traces_recent(
+        n: int = Query(default=50, ge=1, le=500),
+    ) -> list[dict]:
+        if _trace_store is None:
+            return []
+        return [asdict(t) for t in _trace_store.recent(n=n)]
+
+    # ------------------------------------------------------------------
+    # GET /traces/history — paginated JSONL read (newest first)
+    # ------------------------------------------------------------------
+
+    @app.get("/traces/history")
+    def traces_history(
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=200),
+    ) -> list[dict]:
+        if _trace_store is None:
+            return []
+        return [asdict(t) for t in _trace_store.historical(offset=offset, limit=limit)]
+
+    # ------------------------------------------------------------------
+    # GET /traces/stream — SSE live stream with 30s keepalive
+    # ------------------------------------------------------------------
+
+    @app.get("/traces/stream")
+    async def traces_stream() -> StreamingResponse:
+        if _trace_store is None:
+            return StreamingResponse(
+                iter([": no trace store configured\n\n"]),
+                media_type="text/event-stream",
+            )
+
+        async def _event_generator():
+            q = _trace_store.subscribe()
+            try:
+                while True:
+                    try:
+                        trace = await asyncio.wait_for(q.get(), timeout=30)
+                        yield f"data: {json.dumps(asdict(trace))}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+            finally:
+                _trace_store.unsubscribe(q)
+
+        return StreamingResponse(
+            _event_generator(),
+            media_type="text/event-stream",
         )
 
     return app

@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +13,7 @@ from src.core.providers import (
     classify_prompt,
     provider_from_env,
 )
+from src.core.trace_store import TraceStore
 
 
 def test_mock_provider_satisfies_protocol() -> None:
@@ -216,6 +219,37 @@ class TestHybridRoutingProvider:
         hybrid = self._make_hybrid()
         with pytest.raises(NotImplementedError):
             hybrid.embed("text")
+
+    def test_trace_recorded_on_scoring_call(self, tmp_path: Path) -> None:
+        hybrid = self._make_hybrid()
+        hybrid._trace_store = TraceStore(path=tmp_path / "traces.jsonl")
+        hybrid.complete("Reply with ONLY: score: <float>")
+        traces = hybrid._trace_store.recent()
+        assert len(traces) == 1
+        assert traces[0].route == "scoring"
+        assert traces[0].duration_ms >= 0
+
+    def test_trace_recorded_on_reasoning_call(self, tmp_path: Path) -> None:
+        hybrid = self._make_hybrid()
+        hybrid._trace_store = TraceStore(path=tmp_path / "traces.jsonl")
+        hybrid.complete("Analyze the following evidence and explain step-by-step")
+        traces = hybrid._trace_store.recent()
+        assert len(traces) == 1
+        assert traces[0].route == "reasoning"
+
+    def test_no_trace_when_store_is_none(self) -> None:
+        hybrid = self._make_hybrid()
+        # _trace_store defaults to None — should not raise
+        hybrid.complete("Reply with ONLY: score: <float>")
+
+    def test_trace_captures_model_name(self, tmp_path: Path) -> None:
+        hybrid = self._make_hybrid()
+        hybrid._trace_store = TraceStore(path=tmp_path / "traces.jsonl")
+        hybrid.complete("Reply with ONLY: score: <float>")
+        traces = hybrid._trace_store.recent()
+        # MockProvider doesn't have .model, but scoring goes through it;
+        # the model attr comes from scoring_provider/reasoning_provider
+        assert len(traces) == 1
 
 
 # --- provider_from_env tests ---

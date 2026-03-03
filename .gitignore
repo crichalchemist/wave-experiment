@@ -34,6 +34,7 @@ env/
 *~
 
 # Data (large files)
+data/traces/
 data/
 # Exception: welfare training data (small, expensive to regenerate)
 !data/

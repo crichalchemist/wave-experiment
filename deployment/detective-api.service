@@ -1,0 +1,15 @@
+[Unit]
+Description=Detective LLM API (FastAPI + trace streaming)
+After=network.target
+
+[Service]
+Type=simple
+User=crichalchemist
+WorkingDirectory=/home/crichalchemist/wave-experiment
+EnvironmentFile=/home/crichalchemist/wave-experiment/.env.local
+ExecStart=/home/crichalchemist/wave-experiment/.venv/bin/uvicorn src.api.routes:app --host 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -2,8 +2,10 @@ import json
 import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 from dataclasses import dataclass, field
 
@@ -28,6 +30,7 @@ _ENV_VLLM_SCORING_MODEL: str = "VLLM_SCORING_MODEL"
 _ENV_AZURE_ENDPOINT: str = "AZURE_ENDPOINT"
 _ENV_AZURE_KEY: str = "AZURE_API_KEY"
 _ENV_AZURE_MODEL: str = "AZURE_MODEL"
+_ENV_TRACE_PATH: str = "DETECTIVE_TRACE_PATH"
 
 # Critic provider — separate from the main inference provider.
 # Used in the CAI critique loop (constitutional warmup, preference pair generation).
@@ -162,21 +165,42 @@ class HybridRoutingProvider:
     Uses classify_prompt() to inspect prompt text. Circuit-breaker: if the
     scoring provider fails once, all subsequent calls fall back to the
     reasoning provider until reset_fallback() is called.
+
+    When a TraceStore is attached, every complete() call records a
+    ReasoningTrace with timing, module classification, and parsed score.
     """
     scoring_provider: VLLMProvider
     reasoning_provider: AzureFoundryProvider
     _scoring_available: bool = field(default=True, init=False, repr=False)
+    _trace_store: Any = field(default=None, init=False, repr=False)
 
     def complete(self, prompt: str, **kwargs) -> str:
         route = classify_prompt(prompt)
+        t0 = time.monotonic()
         if route == "scoring" and self._scoring_available:
             try:
-                return self.scoring_provider.complete(prompt, **kwargs)
+                response = self.scoring_provider.complete(prompt, **kwargs)
+                provider_used = self.scoring_provider
             except Exception as exc:
                 _logger.warning("Scoring provider failed (%s), falling back to Azure", exc)
                 self._scoring_available = False
-                return self.reasoning_provider.complete(prompt, **kwargs)
-        return self.reasoning_provider.complete(prompt, **kwargs)
+                response = self.reasoning_provider.complete(prompt, **kwargs)
+                provider_used = self.reasoning_provider
+        else:
+            response = self.reasoning_provider.complete(prompt, **kwargs)
+            provider_used = self.reasoning_provider
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        if self._trace_store is not None:
+            from src.core.reasoning_trace import ReasoningTrace
+            trace = ReasoningTrace.create(
+                prompt=prompt,
+                raw_response=response,
+                model=getattr(provider_used, "model", "unknown"),
+                route=route,
+                duration_ms=duration_ms,
+            )
+            self._trace_store.record(trace)
+        return response
 
     def embed(self, text: str) -> list[float]:
         raise NotImplementedError("HybridRoutingProvider does not support embeddings")
@@ -237,7 +261,12 @@ def provider_from_env() -> ModelProvider:
         reasoning = AzureFoundryProvider(
             endpoint=azure_endpoint, api_key=azure_key, model=azure_model
         )
-        return HybridRoutingProvider(scoring_provider=scoring, reasoning_provider=reasoning)
+        hybrid = HybridRoutingProvider(scoring_provider=scoring, reasoning_provider=reasoning)
+        trace_path = os.environ.get(_ENV_TRACE_PATH)
+        if trace_path:
+            from src.core.trace_store import TraceStore
+            hybrid._trace_store = TraceStore(path=Path(trace_path))
+        return hybrid
     raise ValueError(
         f"Unknown provider type {provider_type!r}. "
         f"Set {_ENV_PROVIDER}=vllm|azure|hybrid"
