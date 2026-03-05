@@ -10,8 +10,9 @@ fallback when the model is not yet trained.
 from typing import Dict, Optional, Tuple
 import logging
 import math
+import threading
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Keyword patterns for construct threat inference (fallback)
@@ -102,6 +103,27 @@ CONSTRUCT_FLOORS: Dict[str, float] = {
     "eps": 0.10,
 }
 
+# ---------------------------------------------------------------------------
+# Named constants — formula parameters (previously inline magic numbers)
+# ---------------------------------------------------------------------------
+
+# Recovery-aware sigmoid parameters (recovery_aware_input)
+_SIGMOID_STEEPNESS: float = 10.0   # How sharply sigmoid responds to trajectory change
+_SIGMOID_BIAS: float = -3.0        # Shift so dx_dt=0 maps to ~0.047 (not 0.5)
+_COMMUNITY_GUARD: float = 0.01     # Guard against lam_L=0 in community_capacity
+
+# Equity weight defaults
+_EQUITY_GUARD: float = 0.01        # Guard against division by zero
+_EQUITY_DEFAULT: float = 0.5       # Default construct level when absent from metrics
+
+# Normalization offsets (soft saturation: score = x / (x + k))
+_WELFARE_NORM_K: float = 1.0       # score -> 0.5 when gradient_sum = 1.0
+_CURIOSITY_NORM_K: float = 1.0     # same semantics for curiosity
+_TRAJECTORY_URGENCY_K: float = 0.02  # decline of 0.02/step -> urgency ~0.5
+
+# Forecast noise
+_FORECAST_NOISE_SCALE: float = 0.001  # Tiny noise for signal processing stability
+
 
 def _sigmoid(x: float) -> float:
     """Numerically stable sigmoid."""
@@ -136,8 +158,8 @@ def recovery_aware_input(
     # Without this, sigmoid(0)=0.5 would dominate community_capacity*0.5
     # for all lam_L < 1.0, preventing community from compensating for
     # stagnant trajectory (contradicting the design intent).
-    trajectory = _sigmoid(10.0 * dx_dt_i - 3.0)
-    community_capacity = max(0.01, lam_L) ** 0.5  # guard against lam_L=0
+    trajectory = _sigmoid(_SIGMOID_STEEPNESS * dx_dt_i + _SIGMOID_BIAS)
+    community_capacity = max(_COMMUNITY_GUARD, lam_L) ** GAMMA
     recovery_potential = max(trajectory, community_capacity * 0.5)
 
     return x_i + (floor_i - x_i) * recovery_potential
@@ -155,7 +177,7 @@ def equity_weights(metrics: Dict[str, float]) -> Dict[str, float]:
     Replaces symmetric Nash theta=1/8 with Rawlsian maximin.
     """
     inv = {
-        c: 1.0 / max(0.01, metrics.get(c, 0.5))
+        c: 1.0 / max(_EQUITY_GUARD, metrics.get(c, _EQUITY_DEFAULT))
         for c in ALL_CONSTRUCTS
     }
     inv_sum = sum(inv.values())
@@ -263,13 +285,13 @@ def compute_phi(
     if derivatives is None:
         derivatives = {}
 
-    lam_L_raw = max(0.01, metrics.get("lam_L", 0.5))
+    lam_L_raw = max(_EQUITY_GUARD, metrics.get("lam_L", _EQUITY_DEFAULT))
     f_lam = community_multiplier(lam_L_raw)
 
     # Recovery-aware effective values
     effective: Dict[str, float] = {}
     for c in ALL_CONSTRUCTS:
-        x_raw = max(0.01, metrics.get(c, 0.5))
+        x_raw = max(_EQUITY_GUARD, metrics.get(c, _EQUITY_DEFAULT))
         floor_c = CONSTRUCT_FLOORS[c]
         dx_dt_c = derivatives.get(c, 0.0)
         effective[c] = recovery_aware_input(x_raw, floor_c, dx_dt_c, lam_L_raw)
@@ -280,7 +302,7 @@ def compute_phi(
     # Weighted geometric mean of effective values
     product = 1.0
     for c in ALL_CONSTRUCTS:
-        x_eff = max(0.01, effective[c])
+        x_eff = max(_EQUITY_GUARD, effective[c])
         product *= x_eff ** weights[c]
 
     # Synergy and penalty on RAW metrics
@@ -308,28 +330,15 @@ def _keyword_fallback(text: str) -> Tuple[str, ...]:
 
 
 def get_construct_scores(text: str) -> Dict[str, float]:
-    """
-    Get welfare construct scores in [0, 1] for all 8 constructs.
-
-    Delegates to the semantic classifier (welfare_classifier.py).
-    Falls back to keyword-based binary scores if the model is unavailable.
-
-    Args:
-        text: Input text to analyse.
-
-    Returns:
-        Dict mapping each of the 8 constructs to a score in [0, 1].
-    """
+    """Get welfare construct scores — delegates to semantic classifier with keyword fallback."""
     try:
-        from src.inference.welfare_classifier import get_construct_scores as _semantic_scores
-        scores = _semantic_scores(text)
-        # If all scores are zero, the model wasn't loaded; fall back to keywords
+        from src.inference.welfare_classifier import get_construct_scores as _semantic
+        scores = _semantic(text)
         if any(score > 0.0 for score in scores.values()):
             return scores
-    except Exception:
-        logger.debug("Semantic classifier unavailable, using keyword fallback")
+    except (FileNotFoundError, ValueError, OSError):
+        _logger.debug("Semantic classifier unavailable, using keyword fallback")
 
-    # Keyword fallback: binary 0.0 or 1.0 per construct
     keyword_constructs = _keyword_fallback(text)
     return {
         construct: (1.0 if construct in keyword_constructs else 0.0)
@@ -338,34 +347,15 @@ def get_construct_scores(text: str) -> Dict[str, float]:
 
 
 def infer_threatened_constructs(text: str) -> Tuple[str, ...]:
-    """
-    Infer which Phi constructs a hypothesis/gap threatens.
-
-    Uses semantic classifier as primary method, keyword matching as fallback.
-
-    Returns construct symbols: e.g., ("c", "lam_P") for care + protection.
-
-    Examples:
-        >>> infer_threatened_constructs("Resource allocation gap in 2013-2017")
-        ('c',)
-        >>> infer_threatened_constructs("Redacted correspondence about safeguarding")
-        ('lam_P', 'xi')
-    """
+    """Infer which Phi constructs a hypothesis/gap threatens."""
     try:
-        from src.inference.welfare_classifier import get_construct_scores as _semantic_scores
-        scores = _semantic_scores(text)
-        # If any semantic score is non-zero, the model is loaded
+        from src.inference.welfare_classifier import get_construct_scores as _semantic
+        scores = _semantic(text)
         if any(score > 0.0 for score in scores.values()):
-            threatened = [
-                construct
-                for construct, score in scores.items()
-                if score >= 0.3
-            ]
-            return tuple(sorted(threatened))
-    except Exception:
-        logger.debug("Semantic classifier unavailable, using keyword fallback")
+            return tuple(sorted(c for c, s in scores.items() if s >= 0.3))
+    except (FileNotFoundError, ValueError, OSError):
+        _logger.debug("Semantic classifier unavailable, using keyword fallback")
 
-    # Keyword fallback
     return _keyword_fallback(text)
 
 
@@ -444,7 +434,7 @@ def score_hypothesis_welfare(
     # Normalize to [0, 1] using soft saturation
     # score = gradient_sum / (gradient_sum + k)
     # k=1.0 means score->0.5 when gradient_sum=1.0
-    k = 1.0
+    k = _WELFARE_NORM_K
     normalized = gradient_sum / (gradient_sum + k)
 
     return min(1.0, max(0.0, normalized))
@@ -484,7 +474,7 @@ def score_hypothesis_curiosity(
     raw = math.sqrt(max(0.0, g_love) * max(0.0, g_truth))
 
     # Normalize to [0, 1]
-    k = 1.0
+    k = _CURIOSITY_NORM_K
     return min(1.0, max(0.0, raw / (raw + k)))
 
 
@@ -537,15 +527,19 @@ def compute_gap_urgency(gap: "Gap", phi_metrics: Dict[str, float]) -> float:  # 
 # Layer 2: Forecast-informed trajectory urgency
 # ---------------------------------------------------------------------------
 
+_forecaster_lock = threading.Lock()
 _forecaster_cache = None
 
 
 def _get_forecaster():
-    """Lazy-load PhiTrajectoryForecaster (cached singleton)."""
+    """Lazy-load PhiTrajectoryForecaster (thread-safe cached singleton)."""
     global _forecaster_cache
-    if _forecaster_cache is None:
-        from src.forecasting.phi_trajectory import PhiTrajectoryForecaster
-        _forecaster_cache = PhiTrajectoryForecaster()
+    if _forecaster_cache is not None:
+        return _forecaster_cache
+    with _forecaster_lock:
+        if _forecaster_cache is None:
+            from src.forecasting.phi_trajectory import PhiTrajectoryForecaster
+            _forecaster_cache = PhiTrajectoryForecaster()
     return _forecaster_cache
 
 
@@ -571,7 +565,7 @@ def _forecast_from_metrics(
     data = {}
     for c in ALL_CONSTRUCTS:
         level = max(0.01, min(1.0, metrics.get(c, 0.5)))
-        data[c] = np.full(history_len, level) + rng.normal(0, 0.001, history_len)
+        data[c] = np.full(history_len, level) + rng.normal(0, _FORECAST_NOISE_SCALE, history_len)
         data[c] = np.clip(data[c], 0.0, 1.0)
 
     df = pd.DataFrame(data)
@@ -624,8 +618,8 @@ def score_hypothesis_trajectory(
     """
     try:
         predictions = _get_trajectory_prediction(phi_metrics)
-    except Exception as e:
-        logger.debug(f"Trajectory prediction failed: {e}")
+    except (ImportError, ValueError, RuntimeError, OSError) as e:
+        _logger.debug(f"Trajectory prediction failed: {e}")
         return 0.0
 
     if len(predictions) < 2:
@@ -638,7 +632,7 @@ def score_hypothesis_trajectory(
         return 0.0
 
     decline = -slope  # positive value
-    k = 0.02  # normalize: decline of 0.02/step -> urgency ~0.5
+    k = _TRAJECTORY_URGENCY_K  # normalize: decline of 0.02/step -> urgency ~0.5
     urgency = decline / (decline + k)
 
     return min(1.0, max(0.0, urgency))

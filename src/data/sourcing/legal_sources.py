@@ -6,7 +6,12 @@ surface documents where statute-enforcement gaps are likely present.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+from src.data.sourcing.types import SourceDocument
+
+_logger = logging.getLogger(__name__)
 
 try:
     from datasets import load_dataset
@@ -53,13 +58,13 @@ LEGAL_DOMAIN_CONFIGS: dict[str, dict[str, Any]] = {
 
 def load_legal_domain_batch(
     domain: str,
-    max_examples: int = 200,
+    max_documents: int = 200,
     split: str = "train",
-) -> list[dict[str, Any]]:
+) -> list[SourceDocument]:
     """
     Load documents for a specific legal domain from HuggingFace.
 
-    Each returned dict has: text, source, metadata (with legal_domain tag).
+    Returns SourceDocument instances with legal_domain metadata tag.
     Streams the dataset and applies keyword filtering to find relevant docs.
     """
     if domain not in LEGAL_DOMAIN_CONFIGS:
@@ -77,10 +82,10 @@ def load_legal_domain_batch(
     )
 
     keywords = [k.lower() for k in config["keyword_filters"]]
-    results: list[dict[str, Any]] = []
+    results: list[SourceDocument] = []
 
     for example in ds:
-        if len(results) >= max_examples:
+        if len(results) >= max_documents:
             break
         text = example.get("text", "")
         if not text or not isinstance(text, str):
@@ -90,15 +95,15 @@ def load_legal_domain_batch(
             continue
         if len(text) < 200:
             continue
-        results.append({
-            "text": text,
-            "source": f"huggingface:{config['hf_dataset']}",
-            "metadata": {
+        results.append(SourceDocument(
+            text=text,
+            source=f"huggingface:{config['hf_dataset']}",
+            metadata={
                 "dataset": config["hf_dataset"],
                 "config": config["hf_config"],
                 "legal_domain": domain,
                 "matched_keywords": [kw for kw in keywords if kw in text_lower],
             },
-        })
+        ))
 
     return results

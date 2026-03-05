@@ -23,15 +23,19 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.data.sourcing.types import SourceDocument
 from src.detective.constitution import load_constitution, generate_preference_pair
 from src.inference.welfare_scoring import (
     infer_threatened_constructs,
     score_hypothesis_welfare,
 )
+
+_logger = logging.getLogger(__name__)
 
 _ANALYSIS_PROMPT = (
     "You are an investigative analyst trained in information gap detection.\n\n"
@@ -125,9 +129,9 @@ class ConstitutionalWarmupConfig:
     hf_keyword_filter: str | None = "disclosure"
 
 
-def _load_all_sources(cfg: ConstitutionalWarmupConfig) -> list[dict[str, Any]]:
+def _load_all_sources(cfg: ConstitutionalWarmupConfig) -> list[SourceDocument]:
     """Aggregate examples from all enabled source pipelines."""
-    examples: list[dict[str, Any]] = []
+    examples: list[SourceDocument] = []
     per_source = max(1, cfg.max_examples // 3)
 
     # Load from pre-extracted document file if provided.
@@ -154,11 +158,11 @@ def _load_all_sources(cfg: ConstitutionalWarmupConfig) -> list[dict[str, Any]]:
                         source = lines[0].replace("# Source:", "").strip()
                         text = lines[1].strip() if len(lines) > 1 else ""
                     if text and len(text) > 100:  # skip too-short fragments
-                        examples.append({
-                            "text": text,
-                            "source": source,
-                            "metadata": {"chunk": i}
-                        })
+                        examples.append(SourceDocument(
+                            text=text,
+                            source=source,
+                            metadata={"chunk": i},
+                        ))
             else:
                 # One-per-line format
                 for i, line in enumerate(raw.splitlines()):
@@ -166,13 +170,13 @@ def _load_all_sources(cfg: ConstitutionalWarmupConfig) -> list[dict[str, Any]]:
                         break
                     text = line.strip()
                     if text and not text.startswith("#"):
-                        examples.append({
-                            "text": text,
-                            "source": cfg.document_file,
-                            "metadata": {"line": i + 1}
-                        })
+                        examples.append(SourceDocument(
+                            text=text,
+                            source=cfg.document_file,
+                            metadata={"line": i + 1},
+                        ))
         except Exception:
-            pass  # File not found or read error - continue with other sources
+            _logger.debug("Failed to load document file %s", cfg.document_file)
 
     if cfg.use_huggingface:
         from src.data.sourcing.hf_loader import load_hf_legal_batch
@@ -180,26 +184,26 @@ def _load_all_sources(cfg: ConstitutionalWarmupConfig) -> list[dict[str, Any]]:
             try:
                 batch = load_hf_legal_batch(
                     dataset_name=ds_name,
-                    max_examples=per_source,
+                    max_documents=per_source,
                     keyword_filter=cfg.hf_keyword_filter,
                 )
                 examples.extend(batch)
             except Exception:
-                pass  # Source unavailable — continue with others
+                _logger.debug("HF dataset %s unavailable, skipping", ds_name)
 
     if cfg.use_doj:
         from src.data.sourcing.doj_loader import load_courtlistener_batch
         try:
-            examples.extend(load_courtlistener_batch(max_examples=per_source))
+            examples.extend(load_courtlistener_batch(max_documents=per_source))
         except Exception:
-            pass
+            _logger.debug("CourtListener unavailable, skipping")
 
     if cfg.use_international:
         from src.data.sourcing.international_loader import load_github_public_foia
         try:
-            examples.extend(load_github_public_foia(max_results=per_source))
+            examples.extend(load_github_public_foia(max_documents=per_source))
         except Exception:
-            pass
+            _logger.debug("GitHub FOIA loader unavailable, skipping")
 
     return examples[:cfg.max_examples]
 
@@ -243,18 +247,16 @@ def run_constitutional_warmup(
     error_count = 0
     target = cfg.max_examples - existing_count
 
-    import sys
-
     if existing_count > 0:
-        print(f"Resuming: {existing_count} pairs already exist, generating up to {target} more", file=sys.stderr)
+        _logger.info("Resuming: %d pairs already exist, generating up to %d more", existing_count, target)
 
     if target <= 0:
-        print(f"Already have {existing_count} pairs (target: {cfg.max_examples})", file=sys.stderr)
+        _logger.info("Already have %d pairs (target: %d)", existing_count, cfg.max_examples)
         return existing_count
 
     with output_path.open("a", encoding="utf-8") as f:
         for example in examples:
-            text = example.get("text", "").strip()
+            text = example.text.strip()
             if not text:
                 continue
 
@@ -279,29 +281,29 @@ def run_constitutional_warmup(
                     "instruction": pair.instruction,
                     "rejected": pair.rejected,
                     "chosen": pair.chosen,
-                    "source": example.get("source", "unknown"),
-                    "metadata": example.get("metadata", {}),
+                    "source": example.source,
+                    "metadata": example.metadata,
                 }) + "\n")
                 f.flush()  # write to disk immediately — crash-safe
                 count += 1
 
                 if count % 10 == 0:
-                    print(f"  Progress: {count}/{target} pairs ({count + existing_count} total)", file=sys.stderr)
+                    _logger.info("Progress: %d/%d pairs (%d total)", count, target, count + existing_count)
 
             except Exception as e:
                 error_count += 1
-                print(f"  Error on chunk {example.get('metadata', {})}: {e}", file=sys.stderr)
+                _logger.warning("Error on chunk %s: %s", example.metadata, e)
                 if error_count >= 5:
-                    print("  Too many errors, stopping", file=sys.stderr)
+                    _logger.warning("Too many errors, stopping")
                     break
                 continue  # skip this example and continue
 
             if count >= target:
                 break
 
-    # Report filtering statistics to stderr
-    print(f"\nWelfare filtering: {filtered_count} examples excluded (below threshold)", file=sys.stderr)
-    print(f"Generated: {count} new preference pairs ({error_count} errors)", file=sys.stderr)
-    print(f"Total pairs in file: {count + existing_count}", file=sys.stderr)
+    # Report filtering statistics
+    _logger.info("Welfare filtering: %d examples excluded (below threshold)", filtered_count)
+    _logger.info("Generated: %d new preference pairs (%d errors)", count, error_count)
+    _logger.info("Total pairs in file: %d", count + existing_count)
 
     return count

@@ -22,12 +22,16 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from dataclasses import dataclass, replace
 
-from src.detective.hypothesis import Hypothesis
+from src.detective.hypothesis import Hypothesis, WEIGHTS_BRIDGE
 from src.detective.experience import ExperienceLibrary
 from src.core.providers import ModelProvider
+from src.core.scoring import clamp_confidence, SCORE_RE as _CONFIDENCE_RE
+
+_logger = logging.getLogger(__name__)
 
 _BRANCH_PROMPT = (
     "You are evolving a hypothesis based on a specific piece of evidence.\n\n"
@@ -39,9 +43,6 @@ _BRANCH_PROMPT = (
     "Then state the updated confidence as: confidence: <float between 0 and 1>\n"
     "Keep your response to 2 sentences."
 )
-
-_CONFIDENCE_RE = re.compile(r"confidence\s*:\s*([0-9]*\.?[0-9]+)", re.IGNORECASE)
-
 
 @dataclass(frozen=True)
 class ParallelEvolutionResult:
@@ -63,7 +64,7 @@ def _parse_confidence(response: str, current: float) -> float:
     if not match:
         return max(0.0, current - 0.05)  # unknown response → slight decay
     try:
-        return min(1.0, max(0.0, float(match.group(1))))
+        return clamp_confidence(float(match.group(1)))
     except ValueError:
         return max(0.0, current - 0.05)
 
@@ -165,9 +166,7 @@ async def evolve_parallel(
     if phi_metrics is not None:
         return sorted(
             results,
-            key=lambda r: r.hypothesis.combined_score(
-                alpha=0.45, beta=0.25, gamma=0.15, delta=0.15
-            ),
+            key=lambda r: r.hypothesis.combined_score(**WEIGHTS_BRIDGE),
             reverse=True
         )
     else:

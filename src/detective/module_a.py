@@ -5,11 +5,15 @@ matching the architecture of Modules B and C.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
 from src.core.types import AssumptionType
 from src.core.providers import ModelProvider
+from src.core.scoring import parse_score as _parse_score
+
+_logger = logging.getLogger(__name__)
 
 _CONFIDENCE_THRESHOLD: float = 0.5
 
@@ -33,8 +37,6 @@ _BIAS_PATTERNS: dict[str, re.Pattern] = {
     ),
 }
 
-_SCORE_RE = re.compile(r"(?:score|confidence)\s*[:=]\s*([0-9]*\.?[0-9]+)", re.IGNORECASE)
-
 _SCORING_PROMPT = (
     "Rate the cognitive bias in the following text on a scale of 0.0 to 1.0.\n"
     "Bias type: {bias_type}\n"
@@ -54,13 +56,6 @@ class BiasDetection:
     def __post_init__(self) -> None:
         if not (0.0 <= self.score <= 1.0):
             raise ValueError(f"BiasDetection.score must be in [0.0, 1.0], got {self.score!r}")
-
-
-def _parse_score(response: str, default: float = 0.0) -> float:
-    match = _SCORE_RE.search(response)
-    if match:
-        return min(1.0, max(0.0, float(match.group(1))))
-    return default
 
 
 def detect_cognitive_biases(

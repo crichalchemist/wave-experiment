@@ -28,11 +28,9 @@ def _make_experience(
     )
 
 
-def test_experience_is_frozen() -> None:
-    from dataclasses import FrozenInstanceError
+def test_experience_is_frozen(assert_frozen) -> None:
     exp = _make_experience()
-    with pytest.raises(FrozenInstanceError):
-        exp.outcome_quality = 0.5  # type: ignore[misc]
+    assert_frozen(exp, "outcome_quality", 0.5)
 
 
 def test_empty_library_is_empty_tuple() -> None:

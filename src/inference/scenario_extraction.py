@@ -18,7 +18,7 @@ from src.inference.welfare_scoring import (
     ALL_CONSTRUCTS, compute_phi, get_construct_scores,
 )
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 CHUNK_SIZE_WORDS = 500
 
@@ -177,20 +177,20 @@ def run_extraction_pipeline(
     from pathlib import Path
 
     text = Path(corpus_path).read_text(encoding="utf-8", errors="replace")
-    logger.info(f"Loaded corpus: {len(text)} chars, ~{len(text.split())} words")
+    _logger.info(f"Loaded corpus: {len(text)} chars, ~{len(text.split())} words")
 
     profiles = extract_construct_profiles(text)
-    logger.info(f"Extracted {len(profiles)} construct profiles")
+    _logger.info(f"Extracted {len(profiles)} construct profiles")
 
     patterns = identify_trajectory_patterns(profiles)
-    logger.info(f"Identified {len(patterns)} trajectory patterns")
+    _logger.info(f"Identified {len(patterns)} trajectory patterns")
 
     rng = np.random.default_rng(seed)
     scenarios = []
     for pattern in patterns:
         df = generate_from_template(pattern, length=scenario_length, rng=rng)
         scenarios.append((pattern["label"], df))
-    logger.info(f"Generated {len(scenarios)} synthetic scenarios")
+    _logger.info(f"Generated {len(scenarios)} synthetic scenarios")
 
     return {
         "profiles": profiles,

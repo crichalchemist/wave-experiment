@@ -10,7 +10,12 @@ information is collected — this loader targets institutional documents only.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+from src.data.sourcing.types import SourceDocument
+
+_logger = logging.getLogger(__name__)
 
 # Public sources — all open access
 _OCCRP_SEARCH = "https://www.occrp.org/en/search"
@@ -35,15 +40,15 @@ def _httpx_get(url: str, **kwargs: Any) -> Any:
 
 def load_occrp_batch(
     query: str = "Epstein Maxwell network",
-    max_examples: int = 50,
-) -> list[dict[str, Any]]:
+    max_documents: int = 50,
+) -> list[SourceDocument]:
     """
     Load OCCRP published investigation documents.
 
     OCCRP publishes comprehensive network investigation reports under
-    open access. Returns normalized text with provenance metadata.
+    open access. Returns SourceDocument instances with provenance metadata.
     """
-    results: list[dict[str, Any]] = []
+    results: list[SourceDocument] = []
     try:
         response = _httpx_get(
             _OCCRP_SEARCH,
@@ -53,43 +58,43 @@ def load_occrp_batch(
         # Production: parse HTML for article text using BeautifulSoup
         # Returns metadata-only for now; full text requires HTML parsing
     except Exception:
-        pass
+        _logger.debug("OCCRP search failed")
     return results
 
 
-def load_iicsa_reports() -> list[dict[str, Any]]:
+def load_iicsa_reports() -> list[SourceDocument]:
     """
     Load UK IICSA published reports (public government documents).
 
     IICSA reports are Crown Copyright but freely accessible under
     Open Government Licence v3.0.
     """
-    results: list[dict[str, Any]] = []
+    results: list[SourceDocument] = []
     try:
         response = _httpx_get(_IICSA_REPORTS)
         response.raise_for_status()
         # Production: parse PDF report links, OCR, normalize
     except Exception:
-        pass
+        _logger.debug("IICSA reports fetch failed")
     return results
 
 
 def load_github_public_foia(
     query: str = "Epstein FOIA documents",
-    max_results: int = 20,
-) -> list[dict[str, Any]]:
+    max_documents: int = 20,
+) -> list[SourceDocument]:
     """
     Search GitHub for publicly archived FOIA documents and investigative datasets.
 
     Useful for finding MuckRock, DocumentCloud, and journalism org releases.
-    Returns repository metadata for downstream document fetching.
+    Returns SourceDocument instances for downstream document fetching.
     """
-    results: list[dict[str, Any]] = []
+    results: list[SourceDocument] = []
     try:
         import httpx
         response = httpx.get(
             "https://api.github.com/search/repositories",
-            params={"q": query, "sort": "updated", "per_page": max_results},
+            params={"q": query, "sort": "updated", "per_page": max_documents},
             headers={"Accept": "application/vnd.github.v3+json"},
             timeout=30,
         )
@@ -98,16 +103,16 @@ def load_github_public_foia(
         for repo in data.get("items", []):
             if repo.get("private"):
                 continue
-            results.append({
-                "text": repo.get("description", ""),
-                "source": f"github:{repo['full_name']}",
-                "metadata": {
+            results.append(SourceDocument(
+                text=repo.get("description", ""),
+                source=f"github:{repo['full_name']}",
+                metadata={
                     "repo": repo["full_name"],
                     "url": repo["html_url"],
                     "updated_at": repo.get("updated_at"),
                     "topics": repo.get("topics", []),
                 },
-            })
+            ))
     except Exception:
-        pass
+        _logger.debug("GitHub FOIA search failed")
     return results

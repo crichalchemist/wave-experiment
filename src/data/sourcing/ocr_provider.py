@@ -22,8 +22,11 @@ Default: auto-detect based on torch.cuda.is_available().
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Protocol, runtime_checkable
+
+_logger = logging.getLogger(__name__)
 
 try:
     from PIL import Image as _PILImage

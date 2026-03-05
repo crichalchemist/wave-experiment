@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import sys
 from pathlib import Path
 
@@ -8,12 +9,16 @@ from src.core.providers import provider_from_env
 from src.detective.constitution import load_constitution
 from src.security.sanitizer import sanitize_document
 
+_logger = logging.getLogger(__name__)
+
 _RISK_LEVELS_WARN: frozenset[str] = frozenset({"high", "critical"})
 
 
 @click.group()
 def cli() -> None:
     """Detective LLM — information gap analysis for investigative datasets."""
+    from src.core.log import configure_logging
+    configure_logging()
 
 
 @cli.command()
@@ -87,17 +92,19 @@ def network(entity: str, hops: int, fmt: str) -> None:
                     f"{target} (confidence: {edge.confidence:.2f})"
                 )
 
-    # n-hop exploration: find paths between this entity and its successors' successors
+    # n-hop exploration: prefetch 2-hop targets, then query paths once per unique target
     click.echo(f"\nPaths (up to {hops} hops):")
-    seen_targets: set[str] = set()
+    two_hop_targets: set[str] = set()
     for successor in successors:
         for next_hop in graph.successors(successor):
-            if next_hop != entity and next_hop not in seen_targets:
-                seen_targets.add(next_hop)
-                paths = graph.n_hop_paths(entity, next_hop, max_hops=hops)
-                for p in paths[:3]:  # top 3 paths per target
-                    path_str = " → ".join(p.path)
-                    click.echo(f"  {path_str} (confidence: {p.confidence:.4f}, hops: {p.hops})")
+            if next_hop != entity:
+                two_hop_targets.add(next_hop)
+
+    for target in sorted(two_hop_targets):
+        paths = graph.n_hop_paths(entity, target, max_hops=hops)
+        for p in paths[:3]:
+            path_str = " → ".join(p.path)
+            click.echo(f"  {path_str} (confidence: {p.confidence:.4f}, hops: {p.hops})")
 
 
 @cli.command()

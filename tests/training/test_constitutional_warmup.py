@@ -2,6 +2,8 @@
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
+from src.data.sourcing.types import SourceDocument
+
 # Force keyword fallback — semantic classifier tested separately
 _force_keyword = patch(
     'src.inference.welfare_classifier.get_construct_scores',
@@ -29,8 +31,8 @@ def test_warmup_writes_jsonl(tmp_path, monkeypatch):
 
     # Patch sourcing to return deterministic examples
     mock_examples = [
-        {"text": "The regulator properly reviewed all disclosures.", "source": "test", "metadata": {}},
-        {"text": "The board always maintained proper records.", "source": "test", "metadata": {}},
+        SourceDocument(text="The regulator properly reviewed all disclosures.", source="test", metadata={}),
+        SourceDocument(text="The board always maintained proper records.", source="test", metadata={}),
     ]
     monkeypatch.setattr(
         "src.training.constitutional_warmup._load_all_sources",
@@ -79,7 +81,7 @@ def test_warmup_skips_empty_text(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "src.training.constitutional_warmup._load_all_sources",
-        lambda cfg: [{"text": "", "source": "test", "metadata": {}}],
+        lambda cfg: [SourceDocument(text="", source="test", metadata={})],
     )
     monkeypatch.setattr(
         "src.training.constitutional_warmup.load_constitution",

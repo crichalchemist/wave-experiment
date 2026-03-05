@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ def load_dedupe_mappings(root: Path) -> dict[str, dict[str, str]]:
     """
     path = root / "dedupe.json"
     if not path.exists():
-        logger.warning("dedupe.json not found at %s — skipping normalization", path)
+        _logger.warning("dedupe.json not found at %s — skipping normalization", path)
         return {}
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -94,7 +94,7 @@ def iter_pages(
 
     results_dir = root / "results"
     if not results_dir.exists():
-        logger.warning("results directory not found at %s", results_dir)
+        _logger.warning("results directory not found at %s", results_dir)
         return
 
     for subdir in sorted(results_dir.iterdir()):
@@ -105,7 +105,7 @@ def iter_pages(
                 with open(json_path, encoding="utf-8") as f:
                     data = json.load(f)
             except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                logger.warning("Skipping %s: %s", json_path, exc)
+                _logger.warning("Skipping %s: %s", json_path, exc)
                 continue
 
             meta = data.get("document_metadata", {})
@@ -138,7 +138,7 @@ def load_analyses(root: Path) -> dict[str, EpsteinAnalysis]:
     """Load ``analyses.json`` and return analyses keyed by ``document_id``."""
     path = root / "analyses.json"
     if not path.exists():
-        logger.warning("analyses.json not found at %s", path)
+        _logger.warning("analyses.json not found at %s", path)
         return {}
 
     with open(path, encoding="utf-8") as f:

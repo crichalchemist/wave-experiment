@@ -67,16 +67,17 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 **Multi-task loss formula** — `L_total = L_language + α·L_gap + β·L_assumption` (α=β=0.3). Three output heads: language modeling, gap-type classification, assumption-type classification.
 
-**A+B+C assumption taxonomy:**
-- Module A (`src/detective/module_a.py`): Cognitive biases (confirmation, anchoring, survivorship, ingroup) — DistilBERT classifier
+**A+B+C assumption taxonomy** (library functions — not wired into the default `analyze()` pipeline, callable independently or via future pipeline integration):
+- Module A (`src/detective/module_a.py`): Cognitive biases (confirmation, anchoring, survivorship, ingroup) — regex triggers + LLM-scored confirmation
 - Module B (`src/detective/module_b.py`): Historical determinism — regex triggers + LLM-scored spans
 - Module C (`src/detective/module_c.py`): Geopolitical presumptions — actor + verb pattern matching + LLM scoring
+- All three use shared `src/core/scoring.py` for response parsing (`parse_score`, `clamp_confidence`)
 
 **Special tokens** extend vocabulary: `<GAP>`, `<ASSUME_A>`, `<ASSUME_B>`, `<ASSUME_C>`, `<LINK>`, `<IMPLIED>`, `<CONTRADICTION>`, `<CONFIDENCE:>`.
 
 **n-hop confidence decay** — relationships degrade as `0.9 × 0.7^(hops-1)` per hop.
 
-**Graph of Thought (GoT) parallel hypothesis evolution** — `src/detective/parallel_evolution.py` implements Generate(k) via `asyncio.gather()`. When `phi_metrics` is provided, branches ranked by 4-weight `combined_score = 0.45·confidence + 0.25·welfare_relevance + 0.15·curiosity_relevance + 0.15·trajectory_urgency` (ADR-010). Without `phi_metrics`, falls back to confidence-only sorting. SC-first branching: breadth below 0.5 confidence, depth above.
+**Graph of Thought (GoT) parallel hypothesis evolution** — `src/detective/parallel_evolution.py` implements Generate(k) via `asyncio.gather()`. When `phi_metrics` is provided, branches ranked by `WEIGHTS_BRIDGE` scheme: `combined_score = 0.45·confidence + 0.25·welfare_relevance + 0.15·curiosity_relevance + 0.15·trajectory_urgency` (ADR-010). Without `phi_metrics`, falls back to `WEIGHTS_DEFAULT` (confidence-only: 0.55/0.30/0.15/0.0). Both schemes are named constants in `src/detective/hypothesis.py`. SC-first branching: breadth below 0.5 confidence, depth above.
 
 **Phi(humanity) welfare function (v2.1)** — `src/inference/welfare_scoring.py` scores hypotheses by which welfare constructs they threaten. Formula at v2.1 with recovery-aware floors and derivative tracking. Gradients of Φ prioritize leads threatening scarce constructs. Curiosity coupling (love × truth) surfaces investigative hunches. Formula documented in `docs/humanity-phi-formalized.md`.
 
@@ -88,7 +89,7 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 - Layer 3: Scenario extraction — real text → construct profiles → trajectory patterns → synthetic training scenarios for forecaster (ADR-011)
 - Data flywheel: detective findings enrich forecaster training data, forecaster predictions inform detective prioritization
 
-**Hybrid provider routing (ADR-013)** — `HybridRoutingProvider` in `src/core/providers.py` inspects prompt text via `classify_prompt()` to route scoring calls (modules A/B/C, evolution, graph — "Reply with ONLY: score:") to a local vLLM CPU instance (DeepSeek-R1-Distill-Qwen-1.5B via Docker, chain-of-thought reasoning before scoring) and reasoning calls to Azure Foundry. Circuit-breaker: if vLLM fails, all calls fall back to Azure until `reset_fallback()`. Set `DETECTIVE_PROVIDER=hybrid` to activate; `VLLM_SCORING_URL`/`VLLM_SCORING_MODEL` override defaults. No call-site changes required.
+**Hybrid provider routing (ADR-013)** — `HybridRoutingProvider` in `src/core/providers.py` inspects prompt text via `classify_prompt()` to route scoring calls (modules A/B/C, evolution, graph — "Reply with ONLY: score:") to a local vLLM CPU instance (DeepSeek-R1-Distill-Qwen-1.5B via Docker, chain-of-thought reasoning before scoring) and reasoning calls to Azure Foundry. Circuit-breaker with auto-recovery: if vLLM fails, all calls fall back to Azure; after configurable cooldown (default 60s), scoring is automatically retried. `reset_fallback()` also available for manual recovery. Set `DETECTIVE_PROVIDER=hybrid` to activate; `VLLM_SCORING_URL`/`VLLM_SCORING_MODEL` override defaults. Required env vars validated at startup via `_require_env()`. No call-site changes required.
 
 **Reasoning trace capture (ADR-014)** — `ReasoningTrace` frozen dataclass captures chain-of-thought from scoring calls. `TraceStore` persists to JSONL, keeps a bounded deque (500), and pushes to SSE subscribers. Wired into `HybridRoutingProvider._trace_store` as a zero-call-site-change side-effect. API endpoints: `GET /traces/recent`, `/traces/history`, `/traces/stream` (SSE). Frontend at `crichalchemist.com/reasoning`. Set `DETECTIVE_TRACE_PATH` to enable.
 
@@ -98,13 +99,33 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 ### Implementation status
 
-**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/inference/welfare_scoring.py` (Phi v2.1 formula, recovery floors, derivatives, gradient prioritization, curiosity scoring, trajectory urgency), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/data/sourcing/` (foia_scraper.py, dual_pipeline.py, legal_sources.py — FOIA + legal source ingestion), `src/data/epstein_adapter.py` (epstein-docs parser + entity normalization — ADR-015), `src/data/ingest_epstein.py` (graph population pipeline — ADR-015), `src/data/entity_filter.py` (3-layer entity noise filter + drop logging — ADR-016), `src/security/constitution.py` (epistemic moral compass client), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry, Ollama, hybrid routing providers — ADR-013), `src/core/reasoning_trace.py` + `src/core/trace_store.py` (reasoning trace capture — ADR-014), `src/api/routes.py` (FastAPI endpoints + trace streaming + graph export), `src/cli/main.py` (includes `extract-scenarios`, `ingest-epstein`, `network` commands), `spaces/maninagarden/` (ZeroGPU-accelerated Gradio workbench: graph_client, graph_analytics, graph_features — ADR-017). Full test suite: 680+ tests passing.
+**Working modules:** `src/detective/` (hypothesis, evolution, parallel_evolution, modules A/B/C, experience library), `src/core/scoring.py` (shared `parse_score`/`clamp_confidence` used by all detective modules), `src/core/log.py` (centralized logging config — ADR-019), `src/data/sourcing/types.py` (`SourceDocument` frozen dataclass + `DocumentLoader` Protocol — ADR-018), `src/inference/welfare_scoring.py` (Phi v2.1 formula, recovery floors, derivatives, gradient prioritization, curiosity scoring, trajectory urgency — all formula parameters are named constants), `src/inference/welfare_classifier.py` (Hub-first DistilBERT classifier — canonical source for construct scoring, `welfare_scoring.py` wraps with keyword fallback), `src/inference/scenario_extraction.py` (corpus → construct profiles → scenario templates), `src/forecasting/` (PhiTrajectoryForecaster, pipeline, scenarios), `src/data/sourcing/` (foia_scraper.py with guarded scraping imports, dual_pipeline.py, legal_sources.py, hf_loader.py, doj_loader.py, international_loader.py, ocr_provider.py — all loaders return `SourceDocument` per ADR-018), `src/data/epstein_adapter.py` (epstein-docs parser + entity normalization — ADR-015), `src/data/ingest_epstein.py` (graph population pipeline — ADR-015), `src/data/entity_filter.py` (3-layer entity noise filter + drop logging — ADR-016), `src/security/constitution.py` (epistemic moral compass client), `src/core/graph.py` (HybridGraphLayer + GATv2Conv), `src/core/providers.py` (Azure Foundry, Ollama, hybrid routing providers with circuit breaker auto-recovery — ADR-013), `src/core/reasoning_trace.py` + `src/core/trace_store.py` (reasoning trace capture with streaming pagination — ADR-014), `src/api/routes.py` (FastAPI endpoints + trace streaming + graph export + configurable CORS), `src/cli/main.py` (includes `extract-scenarios`, `ingest-epstein`, `network` commands), `src/training/constitutional_warmup.py` (constitutional preference pair generation — full implementation), `spaces/maninagarden/` (ZeroGPU-accelerated Gradio workbench: graph_client, graph_analytics, graph_features — ADR-017). Full test suite: 760+ tests passing.
 
-**Stubs:** `src/training/constitutional_warmup.py`, multi-task loss integration.
+**Stubs:** Multi-task loss integration.
 
 **Design docs:** `docs/plans/` contains implementation plans and design docs. `docs/humanity-phi-formalized.md` is the welfare function paper. `docs/constitution.md` is the epistemic moral compass.
 
-**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-017). Consult before making changes to the systems they cover.
+**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-019). Consult before making changes to the systems they cover.
+
+### Environment variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DETECTIVE_PROVIDER` | Yes | — | Provider selection: `vllm`, `azure`, `hybrid` |
+| `VLLM_BASE_URL` | vllm/hybrid | — | vLLM inference endpoint |
+| `VLLM_MODEL` | vllm | — | vLLM model name |
+| `VLLM_SCORING_URL` | — | `http://localhost:8100/v1` | Hybrid scoring endpoint |
+| `VLLM_SCORING_MODEL` | — | `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` | Hybrid scoring model |
+| `AZURE_ENDPOINT` | azure/hybrid | — | Azure Foundry endpoint |
+| `AZURE_API_KEY` | azure/hybrid | — | Azure API key |
+| `AZURE_MODEL` | azure/hybrid | — | Azure deployment name |
+| `AZURE_CRITIC_ENDPOINT` | CAI warmup | — | Separate critic endpoint |
+| `AZURE_CRITIC_KEY` | CAI warmup | — | Separate critic key |
+| `DETECTIVE_TRACE_PATH` | — | disabled | JSONL path for reasoning traces |
+| `DETECTIVE_GRAPH_BACKEND` | — | `memory` | Graph backend: `memory`, `kuzu` |
+| `CORS_ORIGINS` | — | 4 default origins | Comma-separated CORS origins |
+| `WELFARE_MODEL_PATH` | — | `models/welfare-constructs-distilbert` | Local welfare classifier path |
+| `DETECTIVE_CONSTITUTION_PATH` | — | `docs/constitution.md` | Constitution file path |
 
 ### Data layout (planned)
 

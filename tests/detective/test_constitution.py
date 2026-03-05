@@ -55,15 +55,13 @@ def test_mentor_prompt_contains_mentor_role_framing() -> None:
     assert analysis in prompt
 
 
-def test_preference_pair_is_frozen() -> None:
-    from dataclasses import FrozenInstanceError
+def test_preference_pair_is_frozen(assert_frozen) -> None:
     pair = PreferencePair(
         instruction="detect gaps",
         chosen="revised analysis",
         rejected="original analysis",
     )
-    with pytest.raises(FrozenInstanceError):
-        pair.chosen = "modified"  # type: ignore[misc]
+    assert_frozen(pair, "chosen", "modified")
 
 
 def test_generate_preference_pair_returns_pair() -> None:

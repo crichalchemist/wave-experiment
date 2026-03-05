@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import asdict
 
 try:
@@ -117,6 +118,9 @@ def create_app(
                 for SSE streaming, recent queries, and JSONL history.
     All route handlers share the same provider/store instances via closure.
     """
+    from src.core.log import configure_logging
+    configure_logging()
+
     if FastAPI is None:
         raise ImportError("fastapi is required to create the Detective LLM API app.")
 
@@ -127,21 +131,40 @@ def create_app(
     else:
         try:
             _provider = provider_from_env()
-        except (ValueError, KeyError, ImportError):
+        except (ValueError, KeyError, ImportError) as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Provider configuration failed (%s), using MockProvider. "
+                "API will return synthetic responses.",
+                exc,
+            )
             _provider = MockProvider(response=_API_MOCK_RESPONSE)
 
-    _trace_store = trace_store
+    # If no explicit trace_store, extract from the provider (hybrid mode creates one)
+    if trace_store is not None:
+        _trace_store = trace_store
+    else:
+        _trace_store = getattr(_provider, "_trace_store", None)
 
     app = FastAPI(title=API_TITLE, version=API_VERSION)
 
+    _DEFAULT_CORS_ORIGINS = [
+        "https://www.crichalchemist.com",
+        "https://crichalchemist.com",
+        "https://crichalchemist-maninagarden.hf.space",
+        "http://localhost:7860",
+    ]
+
+    cors_origins_raw = os.environ.get("CORS_ORIGINS")
+    cors_origins = (
+        [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+        if cors_origins_raw
+        else _DEFAULT_CORS_ORIGINS
+    )
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "https://www.crichalchemist.com",
-            "https://crichalchemist.com",
-            "https://crichalchemist-maninagarden.hf.space",
-            "http://localhost:7860",
-        ],
+        allow_origins=cors_origins,
         allow_methods=["GET"],
         allow_headers=["*"],
     )

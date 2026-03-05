@@ -1,11 +1,17 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import logging
+import os
 from pathlib import Path
 
 from src.core.providers import ModelProvider
 from src.security.prompt_guard import build_mentor_critique_prompt, build_revision_prompt
 
-_DEFAULT_CONSTITUTION_PATH: Path = Path("docs/constitution.md")
+_logger = logging.getLogger(__name__)
+
+_DEFAULT_CONSTITUTION_PATH: Path = Path(
+    os.environ.get("DETECTIVE_CONSTITUTION_PATH", "docs/constitution.md")
+)
 
 
 def load_constitution(path: Path = _DEFAULT_CONSTITUTION_PATH) -> str:

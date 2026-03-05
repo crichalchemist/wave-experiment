@@ -27,11 +27,9 @@ def test_assumption_type_contains_required_members() -> None:
     assert required.issubset(set(AssumptionType))
 
 
-def test_gap_is_immutable() -> None:
-    from dataclasses import FrozenInstanceError
+def test_gap_is_immutable(assert_frozen) -> None:
     gap = Gap(type=GapType.TEMPORAL, description="missing Q3", confidence=0.8, location="doc-1")
-    with pytest.raises(FrozenInstanceError):
-        gap.confidence = 0.5  # type: ignore[misc]
+    assert_frozen(gap, "confidence", 0.5)
 
 
 def test_knowledge_edge_default_hop_count() -> None:

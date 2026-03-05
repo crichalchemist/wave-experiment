@@ -1,8 +1,11 @@
 """Hypothesis evolution engine."""
 
+import logging
 from dataclasses import dataclass, replace
 from datetime import datetime
 import uuid
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -97,3 +100,8 @@ class Hypothesis:
             + gamma * self.curiosity_relevance
             + delta * self.trajectory_urgency
         )
+
+
+# Named scoring weight schemes (ADR-010)
+WEIGHTS_DEFAULT = {"alpha": 0.55, "beta": 0.30, "gamma": 0.15, "delta": 0.0}
+WEIGHTS_BRIDGE = {"alpha": 0.45, "beta": 0.25, "gamma": 0.15, "delta": 0.15}

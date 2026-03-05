@@ -15,7 +15,7 @@ from src.inference.welfare_scoring import (
     compute_phi, ALL_CONSTRUCTS,
 )
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 def process_for_evidence(doc: FOIADocument) -> dict[str, Any]:
@@ -59,14 +59,14 @@ def run_dual_pipeline(documents: list[FOIADocument]) -> dict[str, list]:
 
     for doc in documents:
         if not doc.text or not doc.text.strip():
-            logger.debug(f"Skipping empty document: {doc.title}")
+            _logger.debug(f"Skipping empty document: {doc.title}")
             continue
 
         try:
             evidence_results.append(process_for_evidence(doc))
             training_results.append(process_for_training(doc))
         except Exception as e:
-            logger.warning(f"Failed to process {doc.title}: {e}")
+            _logger.warning(f"Failed to process {doc.title}: {e}")
 
-    logger.info(f"Dual pipeline: {len(evidence_results)} evidence, {len(training_results)} training")
+    _logger.info(f"Dual pipeline: {len(evidence_results)} evidence, {len(training_results)} training")
     return {"evidence": evidence_results, "training": training_results}

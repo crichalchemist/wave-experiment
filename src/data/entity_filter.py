@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

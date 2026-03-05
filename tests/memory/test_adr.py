@@ -177,14 +177,12 @@ def test_persist_hypothesis_trace_writes_to_correct_path(sample_trace: Hypothesi
 
 # --- Immutability tests ---
 
-def test_adr_is_frozen(sample_adr: ADR) -> None:
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        sample_adr.title = "Mutated Title"  # type: ignore[misc]
+def test_adr_is_frozen(sample_adr: ADR, assert_frozen) -> None:
+    assert_frozen(sample_adr, "title", "Mutated Title")
 
 
-def test_hypothesis_trace_is_frozen(sample_trace: HypothesisTrace) -> None:
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        sample_trace.confidence = 0.99  # type: ignore[misc]
+def test_hypothesis_trace_is_frozen(sample_trace: HypothesisTrace, assert_frozen) -> None:
+    assert_frozen(sample_trace, "confidence", 0.99)
 
 
 # --- Status validation tests ---

@@ -26,7 +26,7 @@ def test_foia_document_dataclass():
     assert doc.pdf_path is None
 
 
-def test_foia_document_is_frozen():
+def test_foia_document_is_frozen(assert_frozen):
     """FOIADocument is immutable (frozen dataclass)."""
     from src.data.sourcing.foia_scraper import FOIADocument
 
@@ -39,8 +39,7 @@ def test_foia_document_is_frozen():
         text="Some text",
         pdf_path=None,
     )
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        doc.title = "Modified title"  # type: ignore[misc]
+    assert_frozen(doc, "title", "Modified title")
 
 
 def test_portal_configs_exist():

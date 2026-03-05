@@ -25,7 +25,28 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+try:
+    from scrapling import Fetcher
+except ImportError:
+    Fetcher = None  # type: ignore[assignment,misc]
+
+try:
+    from pdf2image import convert_from_path  # type: ignore[import-untyped]
+except ImportError:
+    convert_from_path = None  # type: ignore[assignment,misc]
+
+try:
+    import pytesseract  # type: ignore[import-untyped]
+except ImportError:
+    pytesseract = None  # type: ignore[assignment]
+
+_logger = logging.getLogger(__name__)
+
+
+def _css_first(element: Any, selector: str) -> Any:
+    """Return first CSS match or None. Scrapling dropped css_first() in v0.3+."""
+    results = element.css(selector)
+    return results[0] if results else None
 
 
 @dataclass(frozen=True)
@@ -109,6 +130,10 @@ class FOIAScraper:
             List of FOIADocument with metadata populated. Text field
             may be empty until ``download_and_ingest`` is called.
         """
+        if Fetcher is None:
+            raise ImportError(
+                "Scraping dependencies not installed. Run: pip install detective-llm[scraping]"
+            )
         method = getattr(self, f"_crawl_{self.portal}", None)
         if method is None:
             raise NotImplementedError(
@@ -136,13 +161,6 @@ class FOIAScraper:
           2. Extracts document links and titles
           3. Returns FOIADocument stubs (text empty, pdf_path None)
         """
-        try:
-            from scrapling import Fetcher
-        except ImportError as e:
-            raise ImportError(
-                "Scrapling not installed. Run: pip install 'detective-llm[scraping]'"
-            ) from e
-
         fetcher = Fetcher()
         base = self.config["base_url"]
         collections_path = self.config.get("collections_path", "/vault/")
@@ -154,15 +172,21 @@ class FOIAScraper:
         pages_crawled = 0
 
         while target and pages_crawled < max_pages:
-            logger.info("Crawling FBI Vault page: %s", target)
+            _logger.info("Crawling FBI Vault page: %s", target)
             page = fetcher.get(target)
 
-            # Extract document links from the vault index
-            for link in page.css("a[href$='.pdf'], a[href*='/vault/']"):
+            # Extract document links: PDFs directly, or part /view pages
+            for link in page.css("a"):
                 href = link.attrib.get("href", "")
-                title = link.text or href.split("/")[-1]
+                title = (link.text or "").strip()
 
-                if not href:
+                if not href or not title or len(title) < 4:
+                    continue
+
+                # Match PDF links or vault document /view pages
+                is_pdf = href.endswith(".pdf")
+                is_view = "/view" in href and collection and collection in href.lower().replace("%20", "-").replace(" ", "-")
+                if not is_pdf and not is_view:
                     continue
 
                 # Normalize relative URLs
@@ -172,7 +196,7 @@ class FOIAScraper:
                 documents.append(
                     FOIADocument(
                         source_portal="fbi_vault",
-                        title=title.strip(),
+                        title=title,
                         url=href,
                         date=None,
                         collection=collection,
@@ -182,7 +206,7 @@ class FOIAScraper:
                 )
 
             # Pagination: look for a "next" link
-            next_link = page.css_first("a.next, a[rel='next']")
+            next_link = _css_first(page, "a.next, a[rel='next']")
             if next_link:
                 next_href = next_link.attrib.get("href", "")
                 if next_href.startswith("/"):
@@ -193,7 +217,7 @@ class FOIAScraper:
 
             pages_crawled += 1
 
-        logger.info(
+        _logger.info(
             "FBI Vault crawl complete: %d documents from %d pages",
             len(documents),
             pages_crawled,
@@ -214,13 +238,6 @@ class FOIAScraper:
           2. Paginates through search results
           3. Returns FOIADocument stubs for each catalog entry
         """
-        try:
-            from scrapling import Fetcher
-        except ImportError as e:
-            raise ImportError(
-                "Scrapling not installed. Run: pip install 'detective-llm[scraping]'"
-            ) from e
-
         fetcher = Fetcher()
         base = self.config["base_url"]
         search_path = self.config.get("search_path", "/research/catalog/")
@@ -231,12 +248,12 @@ class FOIAScraper:
         pages_crawled = 0
 
         while target and pages_crawled < max_pages:
-            logger.info("Crawling NARA page: %s", target)
+            _logger.info("Crawling NARA page: %s", target)
             page = fetcher.get(target)
 
             for result in page.css(".result-item, .search-result"):
-                title_el = result.css_first("h3, .title, a")
-                link_el = result.css_first("a[href]")
+                title_el = _css_first(result, "h3, .title, a")
+                link_el = _css_first(result, "a[href]")
 
                 title = title_el.text.strip() if title_el and title_el.text else "Untitled"
                 href = link_el.attrib.get("href", "") if link_el else ""
@@ -244,7 +261,7 @@ class FOIAScraper:
                 if href.startswith("/"):
                     href = f"{base}{href}"
 
-                date_el = result.css_first(".date, time")
+                date_el = _css_first(result, ".date, time")
                 date = date_el.text.strip() if date_el and date_el.text else None
 
                 documents.append(
@@ -259,7 +276,7 @@ class FOIAScraper:
                     )
                 )
 
-            next_link = page.css_first("a.next, a[rel='next'], .pagination a:last-child")
+            next_link = _css_first(page, "a.next, a[rel='next'], .pagination a:last-child")
             if next_link:
                 next_href = next_link.attrib.get("href", "")
                 if next_href.startswith("/"):
@@ -270,7 +287,7 @@ class FOIAScraper:
 
             pages_crawled += 1
 
-        logger.info(
+        _logger.info(
             "NARA crawl complete: %d documents from %d pages",
             len(documents),
             pages_crawled,
@@ -292,13 +309,6 @@ class FOIAScraper:
           2. Extracts document listings with dates and titles
           3. Returns FOIADocument stubs
         """
-        try:
-            from scrapling import Fetcher
-        except ImportError as e:
-            raise ImportError(
-                "Scrapling not installed. Run: pip install 'detective-llm[scraping]'"
-            ) from e
-
         fetcher = Fetcher()
         base = self.config["base_url"]
         reading_room_path = self.config.get("reading_room_path", "/Search/Collections")
@@ -310,12 +320,12 @@ class FOIAScraper:
         pages_crawled = 0
 
         while target and pages_crawled < max_pages:
-            logger.info("Crawling State Dept page: %s", target)
+            _logger.info("Crawling State Dept page: %s", target)
             page = fetcher.get(target)
 
             for row in page.css(".document-row, .search-result, tr.result"):
-                title_el = row.css_first("a, .doc-title, td:first-child")
-                link_el = row.css_first("a[href]")
+                title_el = _css_first(row, "a, .doc-title, td:first-child")
+                link_el = _css_first(row, "a[href]")
 
                 title = title_el.text.strip() if title_el and title_el.text else "Untitled"
                 href = link_el.attrib.get("href", "") if link_el else ""
@@ -323,10 +333,10 @@ class FOIAScraper:
                 if href.startswith("/"):
                     href = f"{base}{href}"
 
-                date_el = row.css_first(".doc-date, td.date, time")
+                date_el = _css_first(row, ".doc-date, td.date, time")
                 date = date_el.text.strip() if date_el and date_el.text else None
 
-                coll_el = row.css_first(".collection, td.collection")
+                coll_el = _css_first(row, ".collection, td.collection")
                 coll = coll_el.text.strip() if coll_el and coll_el.text else collection
 
                 documents.append(
@@ -341,7 +351,7 @@ class FOIAScraper:
                     )
                 )
 
-            next_link = page.css_first("a.next, a[rel='next'], .pagination a:last-child")
+            next_link = _css_first(page, "a.next, a[rel='next'], .pagination a:last-child")
             if next_link:
                 next_href = next_link.attrib.get("href", "")
                 if next_href.startswith("/"):
@@ -352,7 +362,7 @@ class FOIAScraper:
 
             pages_crawled += 1
 
-        logger.info(
+        _logger.info(
             "State Dept crawl complete: %d documents from %d pages",
             len(documents),
             pages_crawled,
@@ -405,7 +415,7 @@ class FOIAScraper:
             local_path = self.output_dir / filename
 
             try:
-                logger.info("Downloading %s -> %s", doc.url, local_path)
+                _logger.info("Downloading %s -> %s", doc.url, local_path)
                 response = httpx.get(doc.url, timeout=60, follow_redirects=True)
                 response.raise_for_status()
                 local_path.write_bytes(response.content)
@@ -419,7 +429,7 @@ class FOIAScraper:
                     )
                 )
             except Exception as exc:
-                logger.warning("Failed to download/ingest %s: %s", doc.url, exc)
+                _logger.warning("Failed to download/ingest %s: %s", doc.url, exc)
                 ingested.append(doc)
 
         return ingested

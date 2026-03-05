@@ -5,6 +5,7 @@ Replaces keyword-based detection with semantic understanding.
 Falls back gracefully to zero scores when the model is not yet trained.
 """
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Dict, Tuple
 import logging
@@ -12,13 +13,13 @@ import logging
 import torch
 from transformers import pipeline
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # Hub model ID (pushed by HF Jobs training)
 HUB_MODEL_ID = "crichalchemist/welfare-constructs-distilbert"
 
 # Local model path (relative to project root) — fallback for development/offline use
-MODEL_PATH = Path("models/welfare-constructs-distilbert")
+MODEL_PATH = Path(os.environ.get("WELFARE_MODEL_PATH", "models/welfare-constructs-distilbert"))
 
 CONSTRUCT_NAMES = ["c", "kappa", "j", "p", "eps", "lam_L", "lam_P", "xi"]
 
@@ -33,7 +34,7 @@ def _load_welfare_classifier():
     """
     # Try Hub first
     try:
-        logger.info(f"Loading welfare classifier from Hub: {HUB_MODEL_ID}...")
+        _logger.info(f"Loading welfare classifier from Hub: {HUB_MODEL_ID}...")
         return pipeline(
             "text-classification",
             model=HUB_MODEL_ID,
@@ -41,7 +42,7 @@ def _load_welfare_classifier():
             top_k=None,
         )
     except (OSError, Exception) as e:
-        logger.debug(f"Hub loading failed: {e}")
+        _logger.debug(f"Hub loading failed: {e}")
 
     # Fallback to local
     config_file = MODEL_PATH / "config.json"
@@ -52,7 +53,7 @@ def _load_welfare_classifier():
             f"Train with scripts/train_welfare_classifier_hf_job.py."
         )
 
-    logger.info(f"Loading welfare classifier from local: {MODEL_PATH}...")
+    _logger.info(f"Loading welfare classifier from local: {MODEL_PATH}...")
     return pipeline(
         "text-classification",
         model=str(MODEL_PATH),
@@ -78,7 +79,7 @@ def get_construct_scores(text: str) -> Dict[str, float]:
         classifier = _load_welfare_classifier()
     except (FileNotFoundError, ValueError, OSError):
         _load_welfare_classifier.cache_clear()
-        logger.warning(
+        _logger.warning(
             "Welfare classifier model not found or invalid; returning zero scores. "
             "Train the model with scripts/train_welfare_classifier.py."
         )

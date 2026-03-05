@@ -24,12 +24,12 @@ def test_load_legal_domain_batch_returns_list():
     ]))
 
     with patch("src.data.sourcing.legal_sources.load_dataset", return_value=mock_ds):
-        results = load_legal_domain_batch("criminal_justice", max_examples=5)
+        results = load_legal_domain_batch("criminal_justice", max_documents=5)
 
     assert isinstance(results, list)
     assert len(results) >= 1
-    assert results[0]["source"].startswith("huggingface:")
-    assert results[0]["metadata"]["legal_domain"] == "criminal_justice"
+    assert results[0].source.startswith("huggingface:")
+    assert results[0].metadata["legal_domain"] == "criminal_justice"
 
 
 def test_load_legal_domain_batch_unknown_domain():

@@ -15,6 +15,7 @@ def test_returns_list():
     provider.complete.return_value = "score: 0.1"
     result = detect_geopolitical_presumptions("The regulator reviewed the filing.", provider)
     assert isinstance(result, list)
+    assert result == []
 
 
 def test_detects_regulatory_assumption():

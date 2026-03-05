@@ -65,8 +65,6 @@ def test_multiple_patterns_accumulate_findings() -> None:
     assert result.risk_level == "critical"
 
 
-def test_sanitization_result_is_frozen() -> None:
-    from dataclasses import FrozenInstanceError
+def test_sanitization_result_is_frozen(assert_frozen) -> None:
     result = sanitize_document("clean text")
-    with pytest.raises(FrozenInstanceError):
-        result.injection_detected = True  # type: ignore[misc]
+    assert_frozen(result, "injection_detected", True)

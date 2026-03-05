@@ -15,6 +15,7 @@ def test_returns_list():
     provider.complete.return_value = "score: 0.1"
     result = detect_historical_determinism("Entity A always operated in New York.", provider)
     assert isinstance(result, list)
+    assert result == []
 
 
 def test_detects_always_language():

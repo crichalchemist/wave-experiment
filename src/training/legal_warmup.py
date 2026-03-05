@@ -13,7 +13,7 @@ Usage:
 from __future__ import annotations
 
 import json
-import sys
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +24,8 @@ from src.training.constitutional_warmup import (
     build_legal_analysis_prompt,
     should_include_example,
 )
+
+_logger = logging.getLogger(__name__)
 
 _ALL_DOMAINS: tuple[str, ...] = (
     "criminal_justice",
@@ -68,7 +70,7 @@ def run_legal_warmup(
     target = total_target - existing_count
 
     if target <= 0:
-        print(f"Already have {existing_count} pairs (target: {total_target})", file=sys.stderr)
+        _logger.info("Already have %d pairs (target: %d)", existing_count, total_target)
         return 0
 
     # Phi metrics at baseline for welfare filtering
@@ -82,7 +84,7 @@ def run_legal_warmup(
     filtered_count = 0
 
     if existing_count > 0:
-        print(f"Resuming: {existing_count} pairs exist, generating up to {target} more", file=sys.stderr)
+        _logger.info("Resuming: %d pairs exist, generating up to %d more", existing_count, target)
 
     with output_path.open("a", encoding="utf-8") as f:
         for domain in cfg.domains:
@@ -90,12 +92,12 @@ def run_legal_warmup(
                 break
 
             domain_target = min(cfg.examples_per_domain, target - total_count)
-            print(f"\n--- Domain: {domain} (target: {domain_target}) ---", file=sys.stderr)
+            _logger.info("--- Domain: %s (target: %d) ---", domain, domain_target)
 
             try:
-                docs = load_legal_domain_batch(domain, max_examples=domain_target * 3)
+                docs = load_legal_domain_batch(domain, max_documents=domain_target * 3)
             except Exception as e:
-                print(f"  Failed to load {domain}: {e}", file=sys.stderr)
+                _logger.warning("Failed to load %s: %s", domain, e)
                 continue
 
             domain_count = 0
@@ -103,7 +105,7 @@ def run_legal_warmup(
                 if domain_count >= domain_target or total_count >= target:
                     break
 
-                text = doc.get("text", "").strip()
+                text = doc.text.strip()
                 if not text:
                     continue
 
@@ -127,9 +129,9 @@ def run_legal_warmup(
                         "instruction": pair.instruction,
                         "rejected": pair.rejected,
                         "chosen": pair.chosen,
-                        "source": doc.get("source", "unknown"),
+                        "source": doc.source,
                         "metadata": {
-                            **doc.get("metadata", {}),
+                            **doc.metadata,
                             "legal_domain": domain,
                         },
                     }
@@ -141,20 +143,20 @@ def run_legal_warmup(
 
                     if total_count % 10 == 0:
                         total = total_count + existing_count
-                        print(f"  Progress: {total_count}/{target} new ({total} total)", file=sys.stderr)
+                        _logger.info("Progress: %d/%d new (%d total)", total_count, target, total)
 
                 except Exception as e:
                     error_count += 1
-                    print(f"  Error: {e}", file=sys.stderr)
+                    _logger.warning("Error: %s", e)
                     if error_count >= 5:
-                        print("  Too many errors in domain, moving on", file=sys.stderr)
+                        _logger.warning("Too many errors in domain, moving on")
                         break
                     continue
 
-            print(f"  {domain}: {domain_count} pairs generated", file=sys.stderr)
+            _logger.info("%s: %d pairs generated", domain, domain_count)
 
-    print(f"\nLegal warmup complete:", file=sys.stderr)
-    print(f"  New pairs: {total_count} ({error_count} errors, {filtered_count} filtered)", file=sys.stderr)
-    print(f"  Total in file: {total_count + existing_count}", file=sys.stderr)
+    _logger.info("Legal warmup complete:")
+    _logger.info("New pairs: %d (%d errors, %d filtered)", total_count, error_count, filtered_count)
+    _logger.info("Total in file: %d", total_count + existing_count)
 
     return total_count

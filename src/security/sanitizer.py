@@ -1,8 +1,11 @@
 from __future__ import annotations
+import logging
 import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Literal
+
+_logger = logging.getLogger(__name__)
 
 # Injection pattern signatures
 _INSTRUCTION_OVERRIDE_PATTERN = re.compile(

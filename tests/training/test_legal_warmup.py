@@ -1,6 +1,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
+from src.data.sourcing.types import SourceDocument
+
 
 def test_legal_warmup_config_defaults():
     from src.training.legal_warmup import LegalWarmupConfig
@@ -33,8 +35,8 @@ def test_run_legal_warmup_calls_pipeline(tmp_path):
     mock_critic.complete.return_value = "mentor critique"
 
     fake_docs = [
-        {"text": "The court ruled on sentencing guidelines..." * 20, "source": "test", "metadata": {}},
-        {"text": "Mandatory minimum sentences diverge from..." * 20, "source": "test", "metadata": {}},
+        SourceDocument(text="The court ruled on sentencing guidelines..." * 20, source="test", metadata={}),
+        SourceDocument(text="Mandatory minimum sentences diverge from..." * 20, source="test", metadata={}),
     ]
 
     with patch("src.training.legal_warmup.load_legal_domain_batch", return_value=fake_docs), \
@@ -78,7 +80,7 @@ def test_run_legal_warmup_resumes_from_existing(tmp_path):
     mock_critic.complete.return_value = "critique"
 
     fake_docs = [
-        {"text": "Sentencing disparity data shows..." * 20, "source": "test", "metadata": {}},
+        SourceDocument(text="Sentencing disparity data shows..." * 20, source="test", metadata={}),
     ]
 
     with patch("src.training.legal_warmup.load_legal_domain_batch", return_value=fake_docs), \

@@ -11,11 +11,15 @@ memoir differs from "always" in a regulatory filing.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
 from src.core.providers import ModelProvider
 from src.core.types import AssumptionType
+from src.core.scoring import parse_score as _parse_score
+
+_logger = logging.getLogger(__name__)
 
 # Phrases that trigger determinism scoring — ordered from strongest signal to weakest.
 _DETERMINISM_TRIGGERS: tuple[str, ...] = (
@@ -64,17 +68,6 @@ class DeterminismDetection:
     def __post_init__(self) -> None:
         if not (0.0 <= self.score <= 1.0):
             raise ValueError(f"score must be in [0, 1], got {self.score}")
-
-
-def _parse_score(response: str) -> float:
-    """Extract float from 'score: 0.85' style response. Returns 0.0 on failure."""
-    match = re.search(r"score\s*:\s*([0-9]*\.?[0-9]+)", response, re.IGNORECASE)
-    if not match:
-        return 0.0
-    try:
-        return min(1.0, max(0.0, float(match.group(1))))
-    except ValueError:
-        return 0.0
 
 
 def detect_historical_determinism(

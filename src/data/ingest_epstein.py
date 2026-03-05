@@ -25,7 +25,7 @@ from src.data.epstein_adapter import (
 )
 from src.data.graph_store import GraphStore
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # Flush every N edges to bound memory during bulk ingestion
 _BULK_FLUSH_SIZE: int = 5_000
@@ -91,7 +91,7 @@ def ingest_epstein(
     people_map.update(fuzzy_new)
     fuzzy_mappings_added = len(fuzzy_new)
     if fuzzy_new:
-        logger.info("Fuzzy dedup added %d new mappings", fuzzy_mappings_added)
+        _logger.info("Fuzzy dedup added %d new mappings", fuzzy_mappings_added)
 
     # Rebuild mappings dict with augmented people_map for iter_pages
     augmented_mappings = {**mappings, "people": people_map}

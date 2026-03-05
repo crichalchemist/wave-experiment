@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from src.core.providers import ModelProvider
@@ -10,6 +11,8 @@ from src.detective.experience import (
     query_similar,
 )
 from src.detective.hypothesis import Hypothesis
+
+_logger = logging.getLogger(__name__)
 
 BRANCHING_THRESHOLD: float = 0.5
 # Confidence delta applied when evidence refutes the hypothesis
