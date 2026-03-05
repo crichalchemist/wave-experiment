@@ -105,7 +105,9 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 **Design docs:** `docs/plans/` contains implementation plans and design docs. `docs/humanity-phi-formalized.md` is the welfare function paper. `docs/constitution.md` is the epistemic moral compass.
 
-**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-019). Consult before making changes to the systems they cover.
+**Python 3.13 compatible** — no removed stdlib modules, no deprecated patterns, all deps verified compatible. `requires-python = ">=3.12"`. See ADR-020.
+
+**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-020). Consult before making changes to the systems they cover.
 
 ### Environment variables
 

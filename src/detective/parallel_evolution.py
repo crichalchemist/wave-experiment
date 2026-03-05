@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from dataclasses import dataclass, replace
 
 from src.detective.hypothesis import Hypothesis, WEIGHTS_BRIDGE
@@ -83,9 +82,8 @@ async def _evolve_branch(
         evidence=evidence,
     )
 
-    # Provider.complete is synchronous — run in executor to avoid blocking event loop
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, provider.complete, prompt)
+    # Provider.complete is synchronous — run in thread to avoid blocking event loop
+    response = await asyncio.to_thread(provider.complete, prompt)
 
     new_confidence = _parse_confidence(response, hypothesis.confidence)
     evolved = hypothesis.update_confidence(new_confidence=new_confidence)

@@ -6,12 +6,10 @@ forecasted construct levels against their hard floors. Constructs projected
 to fall below their floor are flagged as at-risk for gap emergence.
 """
 
-from typing import Dict, List
-
 from src.inference.welfare_scoring import ALL_CONSTRUCTS, CONSTRUCT_FLOORS
 
 
-def predict_gap_emergence(future_metrics: Dict[str, float]) -> List[str]:
+def predict_gap_emergence(future_metrics: dict[str, float]) -> list[str]:
     """Predict which constructs will produce information gaps."""
     return [
         c

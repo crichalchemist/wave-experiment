@@ -6,8 +6,6 @@ Generates time-series DataFrames where each row has 8 construct values
 Used for training and evaluating Phi forecasting models.
 """
 
-from typing import List
-
 import numpy as np
 import pandas as pd
 
@@ -84,7 +82,7 @@ class PhiScenarioGenerator:
         self,
         scenarios_per_type: int = 5,
         length: int = 200,
-    ) -> List[pd.DataFrame]:
+    ) -> list[pd.DataFrame]:
         """Generate multiple trajectories for every scenario type.
 
         Parameters
@@ -99,7 +97,7 @@ class PhiScenarioGenerator:
         list[pd.DataFrame]
             ``len(SCENARIOS) * scenarios_per_type`` DataFrames.
         """
-        dataset: List[pd.DataFrame] = []
+        dataset: list[pd.DataFrame] = []
         for scenario in self.SCENARIOS:
             for _ in range(scenarios_per_type):
                 dataset.append(self.generate(scenario, length=length))
