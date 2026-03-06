@@ -30,32 +30,6 @@ class PathResult:
     hops: int
 
 
-def make_graph() -> KnowledgeGraph:
-    """New graph per analysis run — no shared state between independent analyses."""
-    return nx.DiGraph()
-
-
-def add_edge(
-    graph: KnowledgeGraph,
-    source: str,
-    target: str,
-    relation: RelationType,
-    confidence: float,
-) -> KnowledgeGraph:
-    """
-    Return a new graph with the typed edge added.
-    Copy-on-write preserves the functional contract; the original graph is unchanged.
-    """
-    edge = KnowledgeEdge(
-        source=source,
-        target=target,
-        relation=relation,
-        confidence=confidence,
-    )
-    new_graph = graph.copy()
-    new_graph.add_edge(source, target, **{_EDGE_DATA_KEY: edge})
-    return new_graph
-
 
 def get_edge(graph: KnowledgeGraph, source: str, target: str) -> KnowledgeEdge | None:
     """None return is a valid finding — absence of a direct edge between entities is investigatively meaningful."""

@@ -4,42 +4,63 @@ Phi Research Workbench -- Interactive welfare trajectory forecasting + training.
 7 tabs: Scenario Explorer, Custom Forecast, Experiment Lab,
 Training (gated), Data Workshop (gated), Research, Entity Network (gated).
 """
-import os
-import numpy as np
-import pandas as pd
-import torch
-import plotly.graph_objects as go
-import gradio as gr
+import sys
+import traceback
+
+print("=== app.py loading ===", flush=True)
 
 try:
-    import spaces
-except ImportError:
-    # No-op decorator for local development (spaces is pre-installed on ZeroGPU)
-    class _SpacesMock:
-        @staticmethod
-        def GPU(duration=30):
-            def decorator(fn):
-                return fn
-            return decorator
-    spaces = _SpacesMock()
+    import os
+    import numpy as np
+    import pandas as pd
+    import torch
+    import plotly.graph_objects as go
+    import gradio as gr
+    print("Core imports OK", flush=True)
 
-from welfare import (
-    compute_phi, ALL_CONSTRUCTS, CONSTRUCT_FLOORS, CONSTRUCT_DISPLAY,
-    PENALTY_PAIRS, FORMULA_VERSION,
-)
-from model import load_model, list_checkpoint_versions, load_training_metadata, SEQ_LEN, PRED_LEN, MODEL_REPO
-from scenarios import (
-    generate_scenario, compute_all_signals, compute_all_signals_with_graph,
-    build_reference_scaler, SCENARIOS, SCENARIO_DESCRIPTIONS,
-)
-from training import get_training_script, launch_training_job, HARDWARE_OPTIONS
-from graph_client import fetch_graph, invalidate_cache
-from graph_features import extract_graph_features, GRAPH_FEATURE_NAMES
-from graph_analytics import (
-    detect_communities, compute_centrality, compute_degree,
-    compute_clustering, ego_subgraph, BACKEND as GRAPH_BACKEND,
-)
-import networkx as nx
+    try:
+        import spaces
+        print(f"spaces imported: {spaces.__version__ if hasattr(spaces, '__version__') else 'ok'}", flush=True)
+    except ImportError:
+        # No-op decorator for local development (spaces is pre-installed on ZeroGPU)
+        class _SpacesMock:
+            @staticmethod
+            def GPU(duration=30):
+                def decorator(fn):
+                    return fn
+                return decorator
+        spaces = _SpacesMock()
+        print("spaces not available, using mock", flush=True)
+
+    from welfare import (
+        compute_phi, ALL_CONSTRUCTS, CONSTRUCT_FLOORS, CONSTRUCT_DISPLAY,
+        PENALTY_PAIRS, FORMULA_VERSION,
+    )
+    print("welfare OK", flush=True)
+    from model import load_model, list_checkpoint_versions, load_training_metadata, SEQ_LEN, PRED_LEN, MODEL_REPO
+    print("model OK", flush=True)
+    from scenarios import (
+        generate_scenario, compute_all_signals, compute_all_signals_with_graph,
+        build_reference_scaler, SCENARIOS, SCENARIO_DESCRIPTIONS,
+    )
+    print("scenarios OK", flush=True)
+    from training import get_training_script, launch_training_job, HARDWARE_OPTIONS
+    print("training OK", flush=True)
+    from graph_client import fetch_graph, invalidate_cache
+    print("graph_client OK", flush=True)
+    from graph_features import extract_graph_features, GRAPH_FEATURE_NAMES
+    print("graph_features OK", flush=True)
+    from graph_analytics import (
+        detect_communities, compute_centrality, compute_degree,
+        compute_clustering, ego_subgraph, BACKEND as GRAPH_BACKEND,
+    )
+    print("graph_analytics OK", flush=True)
+    import networkx as nx
+    print("All imports OK", flush=True)
+
+except Exception:
+    traceback.print_exc()
+    sys.exit(1)
 
 # ============================================================================
 # Startup

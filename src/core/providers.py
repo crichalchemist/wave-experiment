@@ -39,6 +39,15 @@ _ENV_CRITIC_ENDPOINT: str = "AZURE_CRITIC_ENDPOINT"
 _ENV_CRITIC_KEY: str = "AZURE_CRITIC_KEY"
 _ENV_CRITIC_MODEL: str = "AZURE_CRITIC_MODEL"
 
+
+def _require_env(var: str) -> str:
+    """Get a required environment variable, raising a clear error if missing."""
+    value = os.environ.get(var)
+    if not value:
+        raise ValueError(f"Required environment variable {var!r} is not set.")
+    return value
+
+
 # Patterns that identify scoring prompts (constrained output, float-only responses).
 # Matched against prompt text to decide local-vs-cloud routing.
 _SCORING_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -172,11 +181,18 @@ class HybridRoutingProvider:
     scoring_provider: VLLMProvider
     reasoning_provider: AzureFoundryProvider
     _scoring_available: bool = field(default=True, init=False, repr=False)
+    _circuit_opened_at: float = field(default=0.0, init=False, repr=False)
+    _circuit_breaker_cooldown: float = field(default=60.0, init=False, repr=False)
     _trace_store: Any = field(default=None, init=False, repr=False)
 
     def complete(self, prompt: str, **kwargs) -> str:
         route = classify_prompt(prompt)
         t0 = time.monotonic()
+        # Auto-recovery: retry scoring after cooldown
+        if not self._scoring_available and self._circuit_opened_at > 0:
+            if (t0 - self._circuit_opened_at) >= self._circuit_breaker_cooldown:
+                _logger.info("Circuit breaker cooldown elapsed, retrying scoring provider")
+                self._scoring_available = True
         if route == "scoring" and self._scoring_available:
             try:
                 response = self.scoring_provider.complete(prompt, **kwargs)
@@ -184,6 +200,7 @@ class HybridRoutingProvider:
             except Exception as exc:
                 _logger.warning("Scoring provider failed (%s), falling back to Azure", exc)
                 self._scoring_available = False
+                self._circuit_opened_at = time.monotonic()
                 response = self.reasoning_provider.complete(prompt, **kwargs)
                 provider_used = self.reasoning_provider
         else:
@@ -242,22 +259,22 @@ def provider_from_env() -> ModelProvider:
             f"{_PROVIDER_VLLM!r}, {_PROVIDER_AZURE!r}, {_PROVIDER_HYBRID!r}"
         )
     if provider_type == _PROVIDER_VLLM:
-        base_url = os.environ[_ENV_VLLM_URL]
-        model = os.environ[_ENV_VLLM_MODEL]
+        base_url = _require_env(_ENV_VLLM_URL)
+        model = _require_env(_ENV_VLLM_MODEL)
         return VLLMProvider(base_url=base_url, model=model)
     elif provider_type == _PROVIDER_AZURE:
-        endpoint = os.environ[_ENV_AZURE_ENDPOINT]
-        api_key = os.environ[_ENV_AZURE_KEY]
-        model = os.environ[_ENV_AZURE_MODEL]
+        endpoint = _require_env(_ENV_AZURE_ENDPOINT)
+        api_key = _require_env(_ENV_AZURE_KEY)
+        model = _require_env(_ENV_AZURE_MODEL)
         return AzureFoundryProvider(endpoint=endpoint, api_key=api_key, model=model)
     elif provider_type == _PROVIDER_HYBRID:
         # Scoring → local vLLM (small model), reasoning → Azure Foundry
         scoring_url = os.environ.get(_ENV_VLLM_SCORING_URL, "http://localhost:8100/v1")
         scoring_model = os.environ.get(_ENV_VLLM_SCORING_MODEL, "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
         scoring = VLLMProvider(base_url=scoring_url, model=scoring_model)
-        azure_endpoint = os.environ[_ENV_AZURE_ENDPOINT]
-        azure_key = os.environ[_ENV_AZURE_KEY]
-        azure_model = os.environ[_ENV_AZURE_MODEL]
+        azure_endpoint = _require_env(_ENV_AZURE_ENDPOINT)
+        azure_key = _require_env(_ENV_AZURE_KEY)
+        azure_model = _require_env(_ENV_AZURE_MODEL)
         reasoning = AzureFoundryProvider(
             endpoint=azure_endpoint, api_key=azure_key, model=azure_model
         )

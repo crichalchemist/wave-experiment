@@ -242,7 +242,6 @@ def main():
         gradient_accumulation_steps=4,
         gradient_checkpointing=True,
         max_length=1024,
-        max_prompt_length=512,
         remove_unused_columns=False,
     )
 

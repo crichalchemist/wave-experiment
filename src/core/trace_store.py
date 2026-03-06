@@ -81,14 +81,30 @@ class TraceStore:
         if not self.path.exists():
             return []
         with self._lock:
+            # First pass: collect byte positions of non-empty lines
+            positions: list[int] = []
             with open(self.path, encoding="utf-8") as f:
-                lines = f.readlines()
-        # Reverse for newest-first ordering
-        lines.reverse()
-        page = lines[offset : offset + limit]
+                while True:
+                    pos = f.tell()
+                    line = f.readline()
+                    if not line:
+                        break
+                    if line.strip():
+                        positions.append(pos)
+
+            # Reverse for newest-first, then slice for pagination
+            positions.reverse()
+            page_positions = positions[offset : offset + limit]
+
+            # Second pass: read only the lines we need
+            lines: list[str] = []
+            with open(self.path, encoding="utf-8") as f:
+                for pos in page_positions:
+                    f.seek(pos)
+                    lines.append(f.readline().strip())
+
         traces: list[ReasoningTrace] = []
-        for line in page:
-            line = line.strip()
+        for line in lines:
             if not line:
                 continue
             data = json.loads(line)

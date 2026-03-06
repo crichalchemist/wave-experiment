@@ -6,8 +6,8 @@ After=network.target
 Type=simple
 User=crichalchemist
 WorkingDirectory=/home/crichalchemist/wave-experiment
-EnvironmentFile=/home/crichalchemist/wave-experiment/.env.local
-ExecStart=/home/crichalchemist/wave-experiment/.venv/bin/uvicorn src.api.routes:app --host 127.0.0.1 --port 8080
+EnvironmentFile=/home/crichalchemist/wave-experiment/deployment/.env.service
+ExecStart=/home/crichalchemist/wave-experiment/.venv/bin/python -m uvicorn src.api.routes:app --host 127.0.0.1 --port 8080
 Restart=on-failure
 RestartSec=5
 

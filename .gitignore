@@ -64,6 +64,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+deployment/.env.service
 
 # Claude Code artifacts
 .claude/

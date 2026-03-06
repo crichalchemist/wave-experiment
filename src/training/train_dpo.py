@@ -23,7 +23,6 @@ DPO_EPOCHS: int = 1            # 1 epoch is typical for DPO
 DPO_BATCH_SIZE: int = 1        # batch_size=1 for CPU training (memory)
 DPO_GRAD_ACCUM: int = 8        # effective batch = 8
 DPO_MAX_LENGTH: int = 1024     # max tokens per sequence
-DPO_MAX_PROMPT_LENGTH: int = 512
 
 # LoRA configuration
 LORA_RANK: int = 16
@@ -133,7 +132,6 @@ def build_dpo_trainer(
         per_device_train_batch_size=DPO_BATCH_SIZE,
         gradient_accumulation_steps=DPO_GRAD_ACCUM,
         max_length=DPO_MAX_LENGTH,
-        max_prompt_length=DPO_MAX_PROMPT_LENGTH,
         precompute_ref_log_probs=True,  # saves ~14GB by freeing ref model
         report_to="none",
         bf16=False,  # set True only when CUDA available
