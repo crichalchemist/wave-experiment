@@ -11,6 +11,7 @@ Supports CPU-only training via LoRA + bf16 + precomputed reference log-probs.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,14 @@ try:
 except ImportError:
     LoraConfig = None  # type: ignore[assignment,misc]
     TaskType = None    # type: ignore[assignment,misc]
+
+try:
+    from transformers import TrainerCallback
+except ImportError:
+    TrainerCallback = None  # type: ignore[assignment,misc]
+
+from src.core.reasoning_trace import ReasoningTrace
+from src.core.trace_store import TraceStore
 
 
 @dataclass(frozen=True)
@@ -99,6 +108,66 @@ def preference_pairs_to_dataset(samples: list[PreferenceSample]) -> Any:
     })
 
 
+class TrainingTraceCallback(TrainerCallback):
+    """Writes training step traces to the JSONL trace store for live display."""
+
+    def __init__(self, trace_store: TraceStore, model_id: str) -> None:
+        self._store = trace_store
+        self._model_id = model_id
+        self._train_start: float = 0.0
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        self._train_start = time.time()
+        self._store.record(ReasoningTrace.create(
+            prompt="DPO Training Started",
+            raw_response=(
+                f"Model: {self._model_id}\n"
+                f"Epochs: {args.num_train_epochs}, Batch: {args.per_device_train_batch_size}, "
+                f"Grad accum: {args.gradient_accumulation_steps}, LR: {args.learning_rate}\n"
+                f"Beta: {DPO_BETA}, LoRA rank: {LORA_RANK}"
+            ),
+            model=self._model_id,
+            route="training.dpo",
+            duration_ms=0,
+        ))
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if not logs:
+            return
+        loss = logs.get("loss")
+        if loss is None:
+            return
+        elapsed = int((time.time() - self._train_start) * 1000)
+        self._store.record(ReasoningTrace.create(
+            prompt=f"DPO Step {state.global_step}",
+            raw_response=(
+                f"loss: {loss:.4f}\n"
+                f"epoch: {logs.get('epoch', 'N/A')}\n"
+                f"learning_rate: {logs.get('learning_rate', 'N/A')}\n"
+                f"score: {max(0, 1.0 - loss):.4f}"
+            ),
+            model=self._model_id,
+            route="training.dpo",
+            duration_ms=elapsed,
+        ))
+
+    def on_train_end(self, args, state, control, **kwargs):
+        elapsed = int((time.time() - self._train_start) * 1000)
+        final_loss = state.log_history[-1].get("loss", "N/A") if state.log_history else "N/A"
+        self._store.record(ReasoningTrace.create(
+            prompt="DPO Training Complete",
+            raw_response=(
+                f"Total steps: {state.global_step}\n"
+                f"Final loss: {final_loss}\n"
+                f"Duration: {elapsed / 1000:.1f}s\n"
+                f"score: {max(0, 1.0 - float(final_loss)) if isinstance(final_loss, (int, float)) else 0:.4f}"
+            ),
+            model=self._model_id,
+            route="training.dpo",
+            duration_ms=elapsed,
+        ))
+
+
 def build_lora_config() -> Any:
     """Build LoRA configuration for parameter-efficient DPO training."""
     if LoraConfig is None:
@@ -118,11 +187,14 @@ def build_dpo_trainer(
     tokenizer: object,
     train_dataset: object,
     eval_dataset: object = None,
+    trace_store: TraceStore | None = None,
+    model_id: str = DEFAULT_MODEL_ID,
 ) -> object:
     """Build a trl DPOTrainer configured for constitutional preference learning.
 
     Does not call .train() — caller controls when training starts.
     eval_dataset is optional; pass None to omit validation during training.
+    trace_store is optional; when provided, training steps are recorded as traces.
     """
     config = DPOConfig(
         output_dir=DPO_OUTPUT_DIR,
@@ -138,6 +210,9 @@ def build_dpo_trainer(
         logging_steps=1,
         save_strategy="epoch",
     )
+    callbacks = []
+    if trace_store is not None and TrainerCallback is not None:
+        callbacks.append(TrainingTraceCallback(trace_store, model_id))
     return DPOTrainer(
         model=model,
         args=config,
@@ -145,4 +220,5 @@ def build_dpo_trainer(
         eval_dataset=eval_dataset,
         peft_config=build_lora_config(),
         processing_class=tokenizer,
+        callbacks=callbacks or None,
     )

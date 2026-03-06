@@ -42,6 +42,25 @@ class TraceStore:
         self._deque = deque(maxlen=_DEFAULT_DEQUE_SIZE)
         self._lock = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._load_recent_from_disk()
+
+    def _load_recent_from_disk(self) -> None:
+        """Pre-populate deque from the tail of the JSONL file so /traces/recent isn't cold."""
+        if not self.path.exists():
+            return
+        try:
+            lines: list[str] = []
+            with open(self.path, encoding="utf-8") as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped:
+                        lines.append(stripped)
+            for line in lines[-_DEFAULT_DEQUE_SIZE:]:
+                data = json.loads(line)
+                self._deque.append(ReasoningTrace(**data))
+            _logger.info("Loaded %d traces from disk into deque", len(self._deque))
+        except Exception:
+            _logger.warning("Failed to pre-load traces from %s", self.path, exc_info=True)
 
     def record(self, trace: ReasoningTrace) -> None:
         """Persist trace to JSONL, push to deque, notify SSE subscribers."""

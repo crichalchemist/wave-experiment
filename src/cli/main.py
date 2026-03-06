@@ -161,6 +161,8 @@ def warmup(output: str, max_examples: int, constitution: str, document_file: str
 @click.option("--eval-split", default=0.1, type=float, help="Fraction of data for evaluation")
 def dpo(data: str, model_id: str | None, output_dir: str, eval_split: float) -> None:
     """Run DPO training on constitutional preference pairs."""
+    from pathlib import Path
+    from src.core.trace_store import TraceStore
     from src.training.train_dpo import (
         load_preference_pairs,
         preference_pairs_to_dataset,
@@ -170,6 +172,9 @@ def dpo(data: str, model_id: str | None, output_dir: str, eval_split: float) -> 
     )
 
     model_id = model_id or DEFAULT_MODEL_ID
+
+    # Initialize trace store for training visibility
+    trace_store = TraceStore(path=Path("data/traces/reasoning.jsonl"))
 
     click.echo(f"Loading preference pairs from {data}")
     samples = load_preference_pairs(data)
@@ -199,12 +204,14 @@ def dpo(data: str, model_id: str | None, output_dir: str, eval_split: float) -> 
         low_cpu_mem_usage=True,
     )
 
-    click.echo("Building DPO trainer with LoRA")
+    click.echo("Building DPO trainer with LoRA (traces enabled)")
     trainer = build_dpo_trainer(
         model=model,
         tokenizer=tokenizer,
         train_dataset=train_ds,
         eval_dataset=eval_ds,
+        trace_store=trace_store,
+        model_id=model_id,
     )
 
     click.echo("Starting DPO training...")
