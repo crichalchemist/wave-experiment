@@ -47,11 +47,14 @@ class DocumentRecord:
     source_path: str        # original file path for provenance
     page_count: int         # number of pages processed
     redaction_ratio: float  # 0.0 (no redaction) to 1.0 (fully redacted)
-    ocr_backend: str        # "tesseract" or "deepseek-ocr"
+    ocr_backend: str        # "tesseract", "deepseek-ocr", or "fallback_chain"
+    ocr_confidence: float = 0.0  # [0.0, 1.0] heuristic quality score
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.redaction_ratio <= 1.0):
             raise ValueError(f"redaction_ratio must be [0,1], got {self.redaction_ratio}")
+        if not (0.0 <= self.ocr_confidence <= 1.0):
+            raise ValueError(f"ocr_confidence must be [0,1], got {self.ocr_confidence}")
 
     @property
     def has_redactions(self) -> bool:
@@ -126,10 +129,29 @@ def _rasterize_pdf(path: Path, dpi: int = 200) -> list["object"]:
         raise ImportError("pip install pdf2image && apt install poppler-utils") from e
 
 
-def _ocr_image_file(image: "object") -> str:
-    """OCR a single PIL Image using the auto-selected backend."""
-    from src.data.sourcing.ocr_provider import ocr_image
-    return ocr_image(image)  # type: ignore[arg-type]
+def _get_ocr_chain() -> "OcrFallbackChain":
+    """Build the default OCR fallback chain from available backends."""
+    from src.data.sourcing.ocr_provider import (
+        OcrFallbackChain,
+        _DeepSeekOcrBackend,
+        _TesseractBackend,
+        default_backend,
+    )
+    # Use the auto-selected backend first, then add the other as fallback
+    backends = [default_backend]
+    if isinstance(default_backend, _DeepSeekOcrBackend):
+        backends.append(_TesseractBackend())
+    elif isinstance(default_backend, _TesseractBackend):
+        # DeepSeek is expensive to add as fallback — only if explicitly requested
+        pass
+    return OcrFallbackChain(backends=backends)
+
+
+def _ocr_image_file(image: "object") -> "OcrResult":
+    """OCR a single PIL Image using the fallback chain."""
+    from src.data.sourcing.ocr_provider import OcrResult
+    chain = _get_ocr_chain()
+    return chain.extract_text_with_confidence(image)  # type: ignore[arg-type]
 
 
 def ingest_document(
@@ -161,18 +183,19 @@ def ingest_document(
     total_redaction = 0.0
     page_count = 0
     backend_name = "unknown"
+    confidence_sum = 0.0
 
     if true_mime in _SUPPORTED_IMAGE_MIMES:
         # Single-page image (including mislabeled PDFs)
         try:
             from PIL import Image as PILImage
             img = PILImage.open(path)
-            text = _ocr_image_file(img)
-            pages_text.append(text)
+            ocr_result = _ocr_image_file(img)
+            pages_text.append(ocr_result.text)
             total_redaction = estimate_redaction_ratio(img)
             page_count = 1
-            from src.data.sourcing.ocr_provider import default_backend
-            backend_name = default_backend.name
+            backend_name = ocr_result.backend_name
+            confidence_sum = ocr_result.confidence
         except Exception as e:
             pages_text.append(f"[OCR FAILED: {e}]")
             page_count = 1
@@ -182,16 +205,16 @@ def ingest_document(
         try:
             images = _rasterize_pdf(path)[:max_pages]
             redaction_sum = 0.0
-            from src.data.sourcing.ocr_provider import default_backend
-            backend_name = default_backend.name
             for img in images:
-                page_text = _ocr_image_file(img)
+                ocr_result = _ocr_image_file(img)
                 redaction = estimate_redaction_ratio(img)
                 redaction_sum += redaction
+                confidence_sum += ocr_result.confidence
+                backend_name = ocr_result.backend_name
                 if redaction > _REDACTION_THRESHOLD:
                     pages_text.append(f"<REDACTED_REGION redaction_ratio={redaction:.2f}>")
                 else:
-                    pages_text.append(page_text)
+                    pages_text.append(ocr_result.text)
             page_count = len(images)
             total_redaction = redaction_sum / page_count if page_count else 0.0
         except Exception as e:
@@ -205,6 +228,8 @@ def ingest_document(
         )
         page_count = 0
 
+    avg_confidence = confidence_sum / page_count if page_count else 0.0
+
     return DocumentRecord(
         text="\n\n".join(pages_text),
         true_mime=true_mime,
@@ -213,4 +238,5 @@ def ingest_document(
         page_count=page_count,
         redaction_ratio=min(1.0, total_redaction),
         ocr_backend=backend_name,
+        ocr_confidence=min(1.0, avg_confidence),
     )

@@ -24,14 +24,75 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 _logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_ALPHA_WEIGHT: float = 0.4
+_WORD_DENSITY_WEIGHT: float = 0.3
+_LENGTH_WEIGHT: float = 0.3
+_LENGTH_NORMALIZER: int = 50  # text >= 50 chars gets full length score
+_WORD_RE: re.Pattern[str] = re.compile(r"[a-zA-Z]{2,}")
 
 try:
     from PIL import Image as _PILImage
 except ImportError:
     _PILImage = None  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# OcrResult + confidence estimation
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OcrResult:
+    """Immutable result of an OCR extraction with confidence score."""
+
+    text: str
+    confidence: float  # [0.0, 1.0]
+    backend_name: str
+
+    def __post_init__(self) -> None:
+        if not (0.0 <= self.confidence <= 1.0):
+            raise ValueError(
+                f"confidence must be in [0, 1], got {self.confidence}"
+            )
+
+
+def estimate_ocr_confidence(text: str) -> float:
+    """Heuristic OCR quality score.
+
+    Combines three signals:
+    - 40% alpha ratio: fraction of alphabetic characters
+    - 30% word density: fraction of text covered by 2+ letter words
+    - 30% length score: penalizes very short output (< 50 chars)
+    """
+    if not text or not text.strip():
+        return 0.0
+
+    alpha_ratio = sum(1 for c in text if c.isalpha()) / len(text)
+    words = _WORD_RE.findall(text)
+    word_density = sum(len(w) for w in words) / len(text) if text else 0.0
+    length_score = min(1.0, len(text.strip()) / _LENGTH_NORMALIZER)
+
+    raw = (
+        _ALPHA_WEIGHT * alpha_ratio
+        + _WORD_DENSITY_WEIGHT * word_density
+        + _LENGTH_WEIGHT * length_score
+    )
+    return min(1.0, max(0.0, raw))
+
+
+# ---------------------------------------------------------------------------
+# OcrBackend Protocol
+# ---------------------------------------------------------------------------
 
 
 @runtime_checkable
@@ -108,6 +169,57 @@ class _DeepSeekOcrBackend:
             return result if isinstance(result, str) else str(result)
         finally:
             os.unlink(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Fallback chain
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CONFIDENCE_THRESHOLD: float = 0.6
+
+
+@dataclass
+class OcrFallbackChain:
+    """Try OCR backends in order, return the highest-confidence result.
+
+    Satisfies the ``OcrBackend`` Protocol so it can be used as a drop-in
+    replacement at any call site that accepts an ``OcrBackend``.
+    """
+
+    backends: list[OcrBackend]
+    confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD
+
+    @property
+    def name(self) -> str:
+        return "fallback_chain"
+
+    def extract_text(self, image: "_PILImage.Image") -> str:  # type: ignore[type-arg]
+        """OcrBackend Protocol method — returns best text as plain string."""
+        return self.extract_text_with_confidence(image).text
+
+    def extract_text_with_confidence(self, image: "_PILImage.Image") -> OcrResult:  # type: ignore[type-arg]
+        """Try each backend, keeping the highest-confidence result.
+
+        Stops early if a result meets ``confidence_threshold``.
+        """
+        best = OcrResult(text="", confidence=0.0, backend_name="none")
+
+        for backend in self.backends:
+            try:
+                text = backend.extract_text(image)
+                conf = estimate_ocr_confidence(text)
+                if conf > best.confidence:
+                    best = OcrResult(
+                        text=text, confidence=conf, backend_name=backend.name
+                    )
+                if conf >= self.confidence_threshold:
+                    break
+            except Exception:
+                _logger.warning(
+                    "OCR backend %s failed, trying next", backend.name
+                )
+
+        return best
 
 
 def _select_backend() -> OcrBackend:

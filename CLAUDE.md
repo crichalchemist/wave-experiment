@@ -105,6 +105,8 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 **spaCy NER pipeline (ADR-025)** — `src/data/ner.py` provides `extract_entities(text) -> NerResult` with spaCy as primary backend (lazy: `en_core_web_trf` → `en_core_web_sm`) and improved heuristic fallback (multi-word entity capture, sentence-starter stripping, all-caps ORG classification). Returns frozen `NerResult` with `.persons`, `.organizations`, `.unique_texts()` helpers. Wired into `_enrich_phase()` for PERSON/ORG extraction. Optional dep: `pip install -e ".[ner]"`.
 
+**OCR fallback chain with confidence scoring (ADR-024)** — `src/data/sourcing/ocr_provider.py` extends the OCR provider with `OcrResult` frozen dataclass (text + confidence + backend_name), `estimate_ocr_confidence()` heuristic (40% alpha ratio + 30% word density + 30% length score), and `OcrFallbackChain` that tries backends in priority order with early stopping when confidence exceeds threshold. Chain satisfies `OcrBackend` Protocol for drop-in compatibility. `DocumentRecord` gains `ocr_confidence` field. Wired into `document_ingestion.py`.
+
 **MinHash/LSH near-duplicate detection (ADR-026)** — `src/data/dedup.py` provides O(n) near-duplicate detection for entities and documents using MinHash signatures + Locality-Sensitive Hashing. Falls back to `difflib.SequenceMatcher` for small sets (< 500 items). `DedupIndex` supports `.add()`, `.find_duplicates()`, `.is_duplicate()`, `.deduplicate()`. `build_entity_mappings_minhash()` replaces `build_fuzzy_mappings()` in ingestion Layer 2. Document dedup wired into `_gather_phase()` to skip near-duplicate evidence. Optional dep: `pip install -e ".[dedup]"`.
 
 ### Implementation status
@@ -117,7 +119,7 @@ src/cli/main.py      ← Click CLI (entry: `detective` script)
 
 **Python 3.13 compatible** — no removed stdlib modules, no deprecated patterns, all deps verified compatible. `requires-python = ">=3.12"`. See ADR-020.
 
-**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-026). Consult before making changes to the systems they cover.
+**ADRs:** `docs/vault/decisions/` contains Architecture Decision Records (ADR-001 through ADR-026, plus ADR-024). Consult before making changes to the systems they cover.
 
 ### Environment variables
 

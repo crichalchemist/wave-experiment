@@ -3,6 +3,8 @@ import io
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from src.data.sourcing.ocr_provider import OcrResult
+
 
 def test_import():
     from src.data.sourcing.document_ingestion import ingest_document, DocumentRecord
@@ -56,7 +58,8 @@ def test_ingest_image_routes_to_ocr(tmp_path):
     fake_jpg = tmp_path / "exhibit.pdf"  # mislabeled
     fake_jpg.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
 
-    mock_ocr = MagicMock(return_value="Extracted text from image.")
+    mock_result = OcrResult(text="Extracted text from image.", confidence=0.85, backend_name="tesseract")
+    mock_ocr = MagicMock(return_value=mock_result)
     mock_pil_image = MagicMock()
 
     with patch("src.data.sourcing.document_ingestion._ocr_image_file", mock_ocr):
@@ -68,6 +71,7 @@ def test_ingest_image_routes_to_ocr(tmp_path):
     assert record.text == "Extracted text from image."
     assert record.true_mime == "image/jpeg"
     assert record.declared_suffix == ".pdf"
+    assert record.ocr_confidence == 0.85
 
 
 def test_ingest_pdf_rasterizes_and_ocrs(tmp_path):
@@ -78,7 +82,8 @@ def test_ingest_pdf_rasterizes_and_ocrs(tmp_path):
     fake_pdf.write_bytes(b"%PDF-1.4\n" + b"\x00" * 100)
 
     mock_rasterize = MagicMock(return_value=[MagicMock()])  # one page
-    mock_ocr = MagicMock(return_value="Page 1 text.")
+    mock_result = OcrResult(text="Page 1 text.", confidence=0.9, backend_name="tesseract")
+    mock_ocr = MagicMock(return_value=mock_result)
 
     with patch("src.data.sourcing.document_ingestion._rasterize_pdf", mock_rasterize):
         with patch("src.data.sourcing.document_ingestion._ocr_image_file", mock_ocr):
@@ -88,6 +93,7 @@ def test_ingest_pdf_rasterizes_and_ocrs(tmp_path):
 
     assert "Page 1 text." in record.text
     assert record.page_count == 1
+    assert record.ocr_confidence == 0.9
 
 
 def test_redaction_ratio_reported(tmp_path):
@@ -116,10 +122,11 @@ def test_ingest_returns_document_record(tmp_path):
     f = tmp_path / "doc.jpg"
     f.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
 
+    mock_result = OcrResult(text="Some extracted text", confidence=0.7, backend_name="tesseract")
     with patch("src.data.sourcing.document_ingestion.detect_true_mime",
                return_value="image/jpeg"):
         with patch("src.data.sourcing.document_ingestion._ocr_image_file",
-                   return_value="Some extracted text"):
+                   return_value=mock_result):
             record = ingest_document(f, source_id="fbi_vault_001")
 
     assert isinstance(record, DocumentRecord)
