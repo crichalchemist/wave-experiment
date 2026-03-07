@@ -42,7 +42,16 @@ class InvestigationConfig:
     seed: str
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     budget: InvestigationBudget = field(default_factory=InvestigationBudget)
-    source_ids: tuple[str, ...] = ("foia_fbi_vault", "graph_neighbourhood")
+    source_ids: tuple[str, ...] = (
+        "foia_fbi_vault",
+        "graph_neighbourhood",
+        "web_search",
+        "news_search",
+        "court_listener",
+        "sec_edgar",
+        "web_occrp",
+        "web_iicsa",
+    )
     constitution_path: str | None = None
     phi_metrics: dict[str, float] | None = None
 

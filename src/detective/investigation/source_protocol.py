@@ -125,6 +125,24 @@ def build_sources(
             sources[sid] = FOIAInvestigationSource(portal=portal)
         elif sid == "graph_neighbourhood":
             sources[sid] = GraphNeighbourhoodSource(graph=graph)
+        elif sid == "web_search":
+            from src.detective.investigation.clearnet_sources import WebSearchSource
+            sources[sid] = WebSearchSource()
+        elif sid == "news_search":
+            from src.detective.investigation.clearnet_sources import NewsSearchSource
+            sources[sid] = NewsSearchSource()
+        elif sid == "court_listener":
+            from src.detective.investigation.clearnet_sources import CourtListenerSource
+            sources[sid] = CourtListenerSource()
+        elif sid == "sec_edgar":
+            from src.detective.investigation.clearnet_sources import SECEdgarSource
+            sources[sid] = SECEdgarSource()
+        elif sid == "web_occrp":
+            from src.detective.investigation.clearnet_sources import OCCRPSource
+            sources[sid] = OCCRPSource()
+        elif sid == "web_iicsa":
+            from src.detective.investigation.clearnet_sources import IICSASource
+            sources[sid] = IICSASource()
         else:
             _logger.warning("Unknown source_id %r — skipped", sid)
 
