@@ -398,3 +398,94 @@ def ingest_epstein_cmd(root: Path, max_pages: int | None, drop_log: Path | None)
     click.echo(f"Fuzzy mappings added:{stats.fuzzy_mappings_added}")
     if drop_log:
         click.echo(f"Drop log:            {drop_log}")
+
+
+@cli.command("investigate")
+@click.option("--mode", "-m", type=click.Choice(["hypothesis", "topic", "reactive"]),
+              required=True, help="Trigger mode for the investigation.")
+@click.option("--seed", "-s", required=True,
+              help="Seed text: a hypothesis, topic, or graph event description.")
+@click.option("--max-steps", type=int, default=50, show_default=True,
+              help="Maximum investigation loop iterations.")
+@click.option("--max-pages", type=int, default=200, show_default=True,
+              help="Maximum pages to fetch across all sources.")
+@click.option("--max-llm-calls", type=int, default=300, show_default=True,
+              help="Maximum LLM calls across the investigation.")
+@click.option("--max-time", type=int, default=3600, show_default=True,
+              help="Maximum wall-clock time in seconds.")
+@click.option("--sources", default="foia_fbi_vault,graph_neighbourhood",
+              show_default=True, help="Comma-separated source IDs.")
+@click.option("--constitution", "-c", default=None,
+              help="Path to constitution file (default: docs/constitution.md).")
+@click.option("--output", "-o", type=click.Path(path_type=Path), default=None,
+              help="Write final report as JSON to this path.")
+def investigate_cmd(
+    mode: str,
+    seed: str,
+    max_steps: int,
+    max_pages: int,
+    max_llm_calls: int,
+    max_time: int,
+    sources: str,
+    constitution: str | None,
+    output: Path | None,
+) -> None:
+    """Run an autonomous investigation loop."""
+    import asyncio
+    import json
+
+    from src.detective.investigation.types import InvestigationBudget, InvestigationConfig
+    from src.detective.investigation.agent import InvestigationAgent
+
+    budget = InvestigationBudget(
+        max_steps=max_steps,
+        max_pages=max_pages,
+        max_llm_calls=max_llm_calls,
+        max_time_seconds=max_time,
+    )
+    source_ids = tuple(s.strip() for s in sources.split(",") if s.strip())
+
+    config = InvestigationConfig(
+        trigger_mode=mode,  # type: ignore[arg-type]
+        seed=seed,
+        budget=budget,
+        source_ids=source_ids,
+        constitution_path=constitution,
+    )
+
+    click.echo(f"Starting investigation [{config.id}] mode={mode}")
+    click.echo(f"Budget: {max_steps} steps, {max_pages} pages, {max_llm_calls} LLM calls, {max_time}s")
+
+    agent = InvestigationAgent.from_env(config)
+    report = asyncio.run(agent.run())
+
+    click.echo(f"\nInvestigation complete: {report.termination_reason}")
+    click.echo(f"  Steps:      {len(report.steps)}")
+    click.echo(f"  Findings:   {len(report.findings)}")
+    click.echo(f"  Hypotheses: {len(report.hypothesis_tree)}")
+    click.echo(f"  Pages:      {report.total_pages}")
+    click.echo(f"  LLM calls:  {report.total_llm_calls}")
+    click.echo(f"  Documents:  {report.total_documents}")
+    click.echo(f"  Elapsed:    {report.elapsed_seconds:.1f}s")
+    click.echo(f"  Graph edges:{report.graph_edges_added}")
+
+    if output:
+        import dataclasses
+        report_dict = dataclasses.asdict(report)
+        # Convert datetime objects to ISO strings for JSON serialization
+        _serialize_datetimes(report_dict)
+        with open(output, "w") as f:
+            json.dump(report_dict, f, indent=2, default=str)
+        click.echo(f"\nReport saved to {output}")
+
+
+def _serialize_datetimes(obj: dict | list) -> None:
+    """Recursively convert datetime objects to ISO strings in a dict/list."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, (dict, list)):
+                _serialize_datetimes(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                _serialize_datetimes(item)

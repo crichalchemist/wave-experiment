@@ -83,6 +83,31 @@ if BaseModel is not None:
         statement: str
         confidence: float
 
+    class InvestigateRequest(BaseModel):  # type: ignore[valid-type]
+        trigger_mode: str  # "hypothesis", "topic", "reactive"
+        seed: str
+        max_steps: int = 50
+        max_pages: int = 200
+        max_llm_calls: int = 300
+        max_time: int = 3600
+        source_ids: list[str] | None = None
+        constitution_path: str | None = None
+        phi_metrics: dict[str, float] | None = None
+
+    class InvestigateStartResponse(BaseModel):  # type: ignore[valid-type]
+        investigation_id: str
+        status: str
+
+    class InvestigationStatusResponse(BaseModel):  # type: ignore[valid-type]
+        id: str
+        steps: int
+        findings: int
+        hypotheses: int
+        pages: int
+        llm_calls: int
+        elapsed_seconds: float
+        running: bool
+
 else:
     # Satisfy module-level names so imports never raise NameError
     AnalyzeRequest = None  # type: ignore[assignment,misc]
@@ -90,6 +115,9 @@ else:
     NetworkResponse = None  # type: ignore[assignment,misc]
     EvolveRequest = None  # type: ignore[assignment,misc]
     EvolveResponse = None  # type: ignore[assignment,misc]
+    InvestigateRequest = None  # type: ignore[assignment,misc]
+    InvestigateStartResponse = None  # type: ignore[assignment,misc]
+    InvestigationStatusResponse = None  # type: ignore[assignment,misc]
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +193,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
@@ -350,6 +378,128 @@ def create_app(
                 "edge_count": len(edges),
             },
         }
+
+    # ------------------------------------------------------------------
+    # Investigation endpoints
+    # ------------------------------------------------------------------
+
+    # In-memory registry of running/completed investigations
+    _investigations: dict = {}
+    _investigation_reports: dict[str, dict] = {}
+    _investigation_tasks: dict[str, asyncio.Task] = {}
+
+    @app.post("/investigate", response_model=InvestigateStartResponse)
+    async def investigate_start(request: InvestigateRequest) -> InvestigateStartResponse:  # type: ignore[name-defined]
+        """Start an autonomous investigation asynchronously."""
+        from src.detective.investigation.agent import InvestigationAgent
+        from src.detective.investigation.types import InvestigationBudget, InvestigationConfig
+
+        budget = InvestigationBudget(
+            max_steps=request.max_steps,
+            max_pages=request.max_pages,
+            max_llm_calls=request.max_llm_calls,
+            max_time_seconds=request.max_time,
+        )
+        source_ids = tuple(request.source_ids) if request.source_ids else ("foia_fbi_vault", "graph_neighbourhood")
+
+        config = InvestigationConfig(
+            trigger_mode=request.trigger_mode,  # type: ignore[arg-type]
+            seed=request.seed,
+            budget=budget,
+            source_ids=source_ids,
+            constitution_path=request.constitution_path,
+            phi_metrics=request.phi_metrics,
+        )
+
+        from src.detective.investigation.source_protocol import build_sources
+        sources = build_sources(config.source_ids, _graph)
+        try:
+            from src.detective.constitution import load_constitution
+            constitution = load_constitution()
+        except FileNotFoundError:
+            constitution = "Epistemic honesty above analytical comfort."
+
+        agent = InvestigationAgent(
+            config=config,
+            provider=_provider,
+            graph=_graph,
+            sources=sources,
+            constitution=constitution,
+            trace_store=_trace_store,
+        )
+        _investigations[config.id] = agent
+
+        async def _run_and_store(inv_id: str, ag: object) -> None:
+            report = await ag.run()
+            _investigation_reports[inv_id] = asdict(report)
+
+        task = asyncio.create_task(_run_and_store(config.id, agent))
+        _investigation_tasks[config.id] = task
+
+        return InvestigateStartResponse(
+            investigation_id=config.id,
+            status="started",
+        )
+
+    @app.get("/investigation/{investigation_id}/status", response_model=InvestigationStatusResponse)
+    def investigation_status(investigation_id: str) -> InvestigationStatusResponse:  # type: ignore[name-defined]
+        """Poll investigation progress."""
+        from fastapi import HTTPException
+
+        agent = _investigations.get(investigation_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+        return InvestigationStatusResponse(**agent.status)
+
+    @app.get("/investigation/{investigation_id}/report")
+    def investigation_report(investigation_id: str) -> dict:
+        """Get the final investigation report."""
+        from fastapi import HTTPException
+        from fastapi.responses import JSONResponse
+
+        report = _investigation_reports.get(investigation_id)
+        if report is not None:
+            return report
+
+        if investigation_id in _investigations:
+            return JSONResponse(status_code=202, content={"status": "running"})
+
+        raise HTTPException(status_code=404, detail="Investigation not found")
+
+    @app.get("/investigation/{investigation_id}/stream")
+    async def investigation_stream(investigation_id: str) -> StreamingResponse:
+        """SSE stream of investigation steps."""
+        agent = _investigations.get(investigation_id)
+        if agent is None:
+            return StreamingResponse(
+                iter([f": investigation {investigation_id} not found\n\n"]),
+                media_type="text/event-stream",
+            )
+
+        async def _step_generator():
+            seen = 0
+            while True:
+                steps = agent._steps  # noqa: SLF001 — direct access for streaming
+                if len(steps) > seen:
+                    for step in steps[seen:]:
+                        yield f"data: {json.dumps(asdict(step), default=str)}\n\n"
+                    seen = len(steps)
+
+                # Check if investigation is complete
+                task = _investigation_tasks.get(investigation_id)
+                if task and task.done():
+                    yield f"data: {json.dumps({'event': 'complete'})}\n\n"
+                    break
+
+                try:
+                    await asyncio.sleep(1)
+                except asyncio.CancelledError:
+                    break
+
+        return StreamingResponse(
+            _step_generator(),
+            media_type="text/event-stream",
+        )
 
     return app
 
