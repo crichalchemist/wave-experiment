@@ -129,7 +129,7 @@ def _rasterize_pdf(path: Path, dpi: int = 200) -> list["object"]:
         raise ImportError("pip install pdf2image && apt install poppler-utils") from e
 
 
-def _get_ocr_chain() -> "OcrFallbackChain":
+def _get_ocr_chain() -> object:
     """Build the default OCR fallback chain from available backends."""
     from src.data.sourcing.ocr_provider import (
         OcrFallbackChain,
@@ -147,11 +147,10 @@ def _get_ocr_chain() -> "OcrFallbackChain":
     return OcrFallbackChain(backends=backends)
 
 
-def _ocr_image_file(image: "object") -> "OcrResult":
+def _ocr_image_file(image: "object") -> object:
     """OCR a single PIL Image using the fallback chain."""
-    from src.data.sourcing.ocr_provider import OcrResult
     chain = _get_ocr_chain()
-    return chain.extract_text_with_confidence(image)  # type: ignore[arg-type]
+    return chain.extract_text_with_confidence(image)  # type: ignore[attr-defined,arg-type]
 
 
 def ingest_document(

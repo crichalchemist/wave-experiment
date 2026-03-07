@@ -497,7 +497,6 @@ def investigate_cmd(
               help="Evidence text(s) to verify against (can be repeated).")
 def audit_person_cmd(name: str, data_dir: Path | None, findings: tuple[str, ...], evidence: tuple[str, ...]) -> None:
     """Audit a person's claims: decompose, verify, and score severity."""
-    import json
     from src.detective.person_auditor import audit_person
 
     finding_texts = list(findings)
@@ -539,7 +538,7 @@ def audit_person_cmd(name: str, data_dir: Path | None, findings: tuple[str, ...]
     click.echo(f"  Severity score:     {result.severity_score:.2f}")
 
     if result.claims:
-        click.echo(f"\nClaims:")
+        click.echo("\nClaims:")
         for i, claim in enumerate(result.claims, 1):
             v = result.verifications[i - 1] if i <= len(result.verifications) else None
             status = v.status if v else "?"

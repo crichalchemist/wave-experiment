@@ -154,7 +154,8 @@ class _DeepSeekOcrBackend:
 
     def extract_text(self, image: "_PILImage.Image") -> str:  # type: ignore[type-arg]
         self._load()
-        import tempfile, os
+        import os
+        import tempfile
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             image.save(tmp.name)
             tmp_path = tmp.name
