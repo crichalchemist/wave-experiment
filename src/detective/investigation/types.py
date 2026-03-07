@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Literal
 import uuid
 
+from src.core.types import AssumptionType
+
 
 # ---------------------------------------------------------------------------
 # Budget
@@ -54,6 +56,8 @@ class InvestigationConfig:
     )
     constitution_path: str | None = None
     phi_metrics: dict[str, float] | None = None
+    enable_assumption_scan: bool = True
+    assumption_threshold: float = 0.5
 
     def __post_init__(self) -> None:
         if self.trigger_mode not in ("hypothesis", "topic", "reactive"):
@@ -123,6 +127,53 @@ class SourceResult:
 
 
 # ---------------------------------------------------------------------------
+# Assumption detection
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AssumptionDetection:
+    """A single assumption detected in a document."""
+
+    module: Literal["A", "B", "C"]
+    assumption_type: AssumptionType
+    score: float
+    source_text: str
+    detail: str  # bias_type (A), trigger_phrase (B), presumed_actor (C)
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.score <= 1.0:
+            raise ValueError(f"score must be in [0, 1], got {self.score}")
+
+
+@dataclass(frozen=True)
+class AssumptionScanResult:
+    """Assumption scan results for a single document."""
+
+    document_url: str
+    detections: tuple[AssumptionDetection, ...]
+    llm_calls: int
+
+    @property
+    def has_assumptions(self) -> bool:
+        return len(self.detections) > 0
+
+    @property
+    def max_score(self) -> float:
+        if not self.detections:
+            return 0.0
+        return max(d.score for d in self.detections)
+
+    @property
+    def assumption_summary(self) -> str:
+        if not self.detections:
+            return "No assumptions detected"
+        parts = []
+        for d in self.detections:
+            parts.append(f"[{d.module}] {d.assumption_type.value}: {d.detail} ({d.score:.2f})")
+        return "; ".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Steps & findings
 # ---------------------------------------------------------------------------
 
@@ -145,6 +196,7 @@ class InvestigationStep:
     findings_produced: int = 0
     pages_consumed: int = 0
     llm_calls: int = 0
+    assumptions_detected: int = 0
 
 
 @dataclass(frozen=True)
@@ -159,6 +211,8 @@ class Finding:
     threatened_constructs: tuple[str, ...] = ()
     welfare_relevance: float = 0.0
     is_injection_finding: bool = False
+    is_assumption_finding: bool = False
+    assumption_module: str = ""
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.confidence <= 1.0:
@@ -174,6 +228,8 @@ class Finding:
         threatened_constructs: tuple[str, ...] = (),
         welfare_relevance: float = 0.0,
         is_injection_finding: bool = False,
+        is_assumption_finding: bool = False,
+        assumption_module: str = "",
     ) -> Finding:
         return cls(
             id=uuid.uuid4().hex[:12],
@@ -184,6 +240,8 @@ class Finding:
             threatened_constructs=threatened_constructs,
             welfare_relevance=welfare_relevance,
             is_injection_finding=is_injection_finding,
+            is_assumption_finding=is_assumption_finding,
+            assumption_module=assumption_module,
         )
 
 
@@ -228,3 +286,4 @@ class InvestigationReport:
     elapsed_seconds: float
     termination_reason: TerminationReason
     graph_edges_added: int = 0
+    total_assumptions_detected: int = 0

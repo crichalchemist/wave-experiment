@@ -36,7 +36,6 @@ from src.core.providers import MockProvider, ModelProvider, provider_from_env
 from src.core.trace_store import TraceStore
 from src.data.graph_store import GraphStore, graph_store_from_env
 from src.detective.experience import EMPTY_LIBRARY
-from src.detective.evolution import evolve_hypothesis
 from src.detective.hypothesis import Hypothesis
 from src.inference.pipeline import analyze
 
@@ -107,6 +106,7 @@ if BaseModel is not None:
         llm_calls: int
         elapsed_seconds: float
         running: bool
+        assumptions_detected: int = 0
 
 else:
     # Satisfy module-level names so imports never raise NameError

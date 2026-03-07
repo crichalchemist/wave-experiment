@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import sys
 from pathlib import Path
 
 import click
@@ -419,6 +418,10 @@ def ingest_epstein_cmd(root: Path, max_pages: int | None, drop_log: Path | None)
               help="Path to constitution file (default: docs/constitution.md).")
 @click.option("--output", "-o", type=click.Path(path_type=Path), default=None,
               help="Write final report as JSON to this path.")
+@click.option("--assumptions/--no-assumptions", default=True, show_default=True,
+              help="Enable A+B+C assumption scanning in analyze phase.")
+@click.option("--assumption-threshold", type=float, default=0.5, show_default=True,
+              help="Minimum score threshold for assumption detections.")
 def investigate_cmd(
     mode: str,
     seed: str,
@@ -429,6 +432,8 @@ def investigate_cmd(
     sources: str,
     constitution: str | None,
     output: Path | None,
+    assumptions: bool,
+    assumption_threshold: float,
 ) -> None:
     """Run an autonomous investigation loop."""
     import asyncio
@@ -451,6 +456,8 @@ def investigate_cmd(
         budget=budget,
         source_ids=source_ids,
         constitution_path=constitution,
+        enable_assumption_scan=assumptions,
+        assumption_threshold=assumption_threshold,
     )
 
     click.echo(f"Starting investigation [{config.id}] mode={mode}")
@@ -468,6 +475,7 @@ def investigate_cmd(
     click.echo(f"  Documents:  {report.total_documents}")
     click.echo(f"  Elapsed:    {report.elapsed_seconds:.1f}s")
     click.echo(f"  Graph edges:{report.graph_edges_added}")
+    click.echo(f"  Assumptions:{report.total_assumptions_detected}")
 
     if output:
         import dataclasses

@@ -15,6 +15,8 @@ from src.detective.investigation.source_protocol import (
     InvestigationSource,
 )
 from src.detective.investigation.types import (
+    AssumptionDetection,
+    AssumptionScanResult,
     DocumentEvidence,
     Finding,
     HypothesisSnapshot,
@@ -27,6 +29,8 @@ from src.detective.investigation.types import (
 )
 
 __all__ = [
+    "AssumptionDetection",
+    "AssumptionScanResult",
     "CourtListenerSource",
     "DocumentEvidence",
     "FOIAInvestigationSource",

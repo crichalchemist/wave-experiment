@@ -32,6 +32,8 @@ from src.detective.investigation.source_protocol import (
     build_sources,
 )
 from src.detective.investigation.types import (
+    AssumptionDetection,
+    AssumptionScanResult,
     DocumentEvidence,
     Finding,
     HypothesisSnapshot,
@@ -43,6 +45,9 @@ from src.detective.investigation.types import (
     SourceResult,
     TerminationReason,
 )
+from src.detective.module_a import detect_cognitive_biases
+from src.detective.module_b import detect_historical_determinism
+from src.detective.module_c import detect_geopolitical_presumptions
 from src.detective.parallel_evolution import evolve_parallel
 from src.inference.pipeline import AnalysisResult, analyze
 from src.inference.welfare_scoring import (
@@ -61,6 +66,20 @@ _PRUNE_CONFIDENCE_THRESHOLD = 0.05
 
 # Parallel evolution branch count
 _EVOLUTION_K = 3
+
+# Assumption scan limits
+_ASSUMPTION_SCAN_MAX_DOCS = 5
+_ASSUMPTION_MAX_FINDINGS_PER_SCAN = 10
+_MAX_COUNTER_LEADS = 3
+_ASSUMPTION_TEXT_LIMIT = 2000
+
+_COUNTER_LEAD_PROMPT = (
+    "An assumption was detected in investigative evidence:\n"
+    "[{module}] {assumption_type}: {detail}\n"
+    "Source: {source_text}\n\n"
+    "Generate a focused search query to investigate whether this assumption "
+    "is valid or masks a gap in the evidence. Reply with ONLY: query: <text>"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +158,8 @@ class InvestigationAgent:
         self._lead_queue: list[Lead] = []
         self._total_documents: int = 0
         self._graph_edges_added: int = 0
+        self._assumption_results: list[AssumptionScanResult] = []
+        self._total_assumptions: int = 0
 
     @classmethod
     def from_env(cls, config: InvestigationConfig) -> InvestigationAgent:
@@ -221,10 +242,15 @@ class InvestigationAgent:
             if reason:
                 return self._build_report(reason)
 
-            # 4. ANALYZE — run documents through pipeline
-            analysis_results, analyze_llm, halt = self._analyze_phase(docs)
+            # 4. ANALYZE — run documents through pipeline + assumption scan
+            analysis_results, analyze_llm, halt, assumption_results = self._analyze_phase(docs)
             self._budget.record_llm_call(analyze_llm)
-            self._record_step("analyze", llm_calls=analyze_llm)
+            assumptions_detected = sum(len(r.detections) for r in assumption_results)
+            self._record_step(
+                "analyze",
+                llm_calls=analyze_llm,
+                assumptions_detected=assumptions_detected,
+            )
 
             if halt:
                 self._record_step("constitutional_halt")
@@ -364,8 +390,11 @@ class InvestigationAgent:
     def _analyze_phase(
         self,
         docs: list[DocumentEvidence],
-    ) -> tuple[list[AnalysisResult], int, bool]:
-        """Analyze documents via 4-layer pipeline. Returns (results, llm_calls, halt)."""
+    ) -> tuple[list[AnalysisResult], int, bool, list[AssumptionScanResult]]:
+        """Analyze documents via 4-layer pipeline + assumption scan.
+
+        Returns (results, llm_calls, halt, assumption_results).
+        """
         results: list[AnalysisResult] = []
         llm_calls = 0
         halt = False
@@ -399,7 +428,19 @@ class InvestigationAgent:
             if halt:
                 break
 
-        return results, llm_calls, halt
+        # Assumption scan (after pipeline, once per unique doc)
+        assumption_results: list[AssumptionScanResult] = []
+        if not halt:
+            scan_results, findings, counter_leads, scan_llm = self._assumption_scan(docs)
+            assumption_results = scan_results
+            llm_calls += scan_llm
+            self._findings.extend(findings)
+            self._lead_queue.extend(counter_leads)
+            self._assumption_results.extend(scan_results)
+            detected = sum(len(r.detections) for r in scan_results)
+            self._total_assumptions += detected
+
+        return results, llm_calls, halt, assumption_results
 
     def _reflect_phase(
         self,
@@ -571,6 +612,212 @@ class InvestigationAgent:
         return edges_added
 
     # -------------------------------------------------------------------
+    # Assumption scanning
+    # -------------------------------------------------------------------
+
+    def _assumption_scan(
+        self,
+        docs: list[DocumentEvidence],
+    ) -> tuple[list[AssumptionScanResult], list[Finding], list[Lead], int]:
+        """Scan documents for assumptions via modules A/B/C.
+
+        Returns (scan_results, findings, counter_leads, llm_calls).
+        """
+        if not self._config.enable_assumption_scan:
+            return [], [], [], 0
+
+        # Deduplicate by URL
+        seen_urls: set[str] = set()
+        unique_docs: list[DocumentEvidence] = []
+        for doc in docs:
+            if doc.source_url not in seen_urls:
+                seen_urls.add(doc.source_url)
+                unique_docs.append(doc)
+
+        threshold = self._config.assumption_threshold
+        scan_results: list[AssumptionScanResult] = []
+        all_findings: list[Finding] = []
+        all_detections: list[AssumptionDetection] = []
+        total_llm_calls = 0
+        findings_this_scan = 0
+
+        for doc in unique_docs[:_ASSUMPTION_SCAN_MAX_DOCS]:
+            if self._budget.check() is not None:
+                break
+
+            text = doc.text[:_ASSUMPTION_TEXT_LIMIT]
+            doc_detections: list[AssumptionDetection] = []
+            doc_llm_calls = 0
+            remaining = self._budget.budget.max_llm_calls - self._budget.llm_calls - total_llm_calls
+
+            # Module A: cognitive biases (keyword-only when budget < 10)
+            try:
+                use_provider = self._provider if remaining >= 10 else None
+                bias_results = detect_cognitive_biases(
+                    text, provider=use_provider, threshold=threshold,
+                )
+                if use_provider is not None:
+                    doc_llm_calls += len(bias_results)
+                for b in bias_results:
+                    doc_detections.append(AssumptionDetection(
+                        module="A",
+                        assumption_type=b.assumption_type,
+                        score=b.score,
+                        source_text=b.source_text[:300],
+                        detail=b.bias_type,
+                    ))
+            except Exception:
+                _logger.exception("Module A scan failed for %s", doc.source_url)
+
+            remaining = self._budget.budget.max_llm_calls - self._budget.llm_calls - total_llm_calls - doc_llm_calls
+
+            # Module B: historical determinism (requires provider)
+            if remaining >= 5:
+                try:
+                    det_results = detect_historical_determinism(
+                        text, provider=self._provider, threshold=threshold,
+                    )
+                    doc_llm_calls += len(det_results)
+                    for d in det_results:
+                        doc_detections.append(AssumptionDetection(
+                            module="B",
+                            assumption_type=d.assumption_type,
+                            score=d.score,
+                            source_text=d.source_text[:300],
+                            detail=d.trigger_phrase,
+                        ))
+                except Exception:
+                    _logger.exception("Module B scan failed for %s", doc.source_url)
+
+            remaining = self._budget.budget.max_llm_calls - self._budget.llm_calls - total_llm_calls - doc_llm_calls
+
+            # Module C: geopolitical presumptions (requires provider)
+            if remaining >= 5:
+                try:
+                    geo_results = detect_geopolitical_presumptions(
+                        text, provider=self._provider, threshold=threshold,
+                    )
+                    doc_llm_calls += len(geo_results)
+                    for g in geo_results:
+                        doc_detections.append(AssumptionDetection(
+                            module="C",
+                            assumption_type=g.assumption_type,
+                            score=g.score,
+                            source_text=g.source_text[:300],
+                            detail=g.presumed_actor,
+                        ))
+                except Exception:
+                    _logger.exception("Module C scan failed for %s", doc.source_url)
+
+            scan_results.append(AssumptionScanResult(
+                document_url=doc.source_url,
+                detections=tuple(doc_detections),
+                llm_calls=doc_llm_calls,
+            ))
+            total_llm_calls += doc_llm_calls
+            all_detections.extend(doc_detections)
+
+            # Create findings (capped per scan)
+            for det in doc_detections:
+                if findings_this_scan >= _ASSUMPTION_MAX_FINDINGS_PER_SCAN:
+                    break
+                all_findings.append(Finding.create(
+                    description=(
+                        f"[{det.module}] {det.assumption_type.value}: {det.detail} "
+                        f"(score {det.score:.2f})"
+                    ),
+                    confidence=det.score,
+                    supporting_document_urls=(doc.source_url,),
+                    is_assumption_finding=True,
+                    assumption_module=det.module,
+                ))
+                findings_this_scan += 1
+
+        # Generate counter-leads
+        counter_leads, lead_llm = self._generate_counter_leads(
+            all_detections, step=self._budget.steps,
+        )
+        total_llm_calls += lead_llm
+
+        return scan_results, all_findings, counter_leads, total_llm_calls
+
+    def _generate_counter_leads(
+        self,
+        detections: list[AssumptionDetection],
+        step: int,
+    ) -> tuple[list[Lead], int]:
+        """Generate counter-leads to probe detected assumptions.
+
+        Returns (leads, llm_calls).
+        """
+        if not detections:
+            return [], 0
+
+        leads: list[Lead] = []
+        llm_calls = 0
+
+        # Sort by score descending, take top N
+        sorted_dets = sorted(detections, key=lambda d: d.score, reverse=True)
+
+        for det in sorted_dets[:_MAX_COUNTER_LEADS]:
+            if self._budget.check() is not None:
+                break
+
+            prompt = _COUNTER_LEAD_PROMPT.format(
+                module=det.module,
+                assumption_type=det.assumption_type.value,
+                detail=det.detail,
+                source_text=det.source_text[:300],
+            )
+
+            try:
+                response = self._provider.complete(prompt)
+                llm_calls += 1
+            except Exception:
+                _logger.exception("Counter-lead generation failed")
+                llm_calls += 1
+                continue
+
+            # Parse query from response
+            query = response.strip()
+            if "query:" in query.lower():
+                query = query.split(":", 1)[1].strip()
+            if not query:
+                continue
+
+            # Route to best source
+            source_id = self._route_counter_lead(det.module)
+
+            leads.append(Lead.create(
+                query=query,
+                source_id=source_id,
+                priority=det.score * 0.8,
+                generation_step=step,
+            ))
+
+        return leads, llm_calls
+
+    def _route_counter_lead(self, module: str) -> str:
+        """Pick the best source for a counter-lead based on module type."""
+        available = set(self._sources.keys())
+
+        if module == "C":
+            # Geopolitical → prefer institutional sources
+            for source_id in ("court_listener", "sec_edgar", "web_search"):
+                if source_id in available:
+                    return source_id
+        else:
+            # Modules A/B → prefer web search
+            for source_id in ("web_search", "news_search"):
+                if source_id in available:
+                    return source_id
+
+        # Fallback: first available source
+        if available:
+            return next(iter(available))
+        return "web_search"
+
+    # -------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------
 
@@ -583,6 +830,7 @@ class InvestigationAgent:
         findings_produced: int = 0,
         pages_consumed: int = 0,
         llm_calls: int = 0,
+        assumptions_detected: int = 0,
     ) -> None:
         step = InvestigationStep(
             step_number=len(self._steps),
@@ -594,6 +842,7 @@ class InvestigationAgent:
             findings_produced=findings_produced,
             pages_consumed=pages_consumed,
             llm_calls=llm_calls,
+            assumptions_detected=assumptions_detected,
         )
         self._steps.append(step)
 
@@ -625,6 +874,7 @@ class InvestigationAgent:
             elapsed_seconds=self._budget.elapsed,
             termination_reason=reason,
             graph_edges_added=self._graph_edges_added,
+            total_assumptions_detected=self._total_assumptions,
         )
 
     @property
@@ -639,6 +889,7 @@ class InvestigationAgent:
             "llm_calls": self._budget.llm_calls,
             "elapsed_seconds": round(self._budget.elapsed, 1),
             "running": self._budget.check() is None,
+            "assumptions_detected": self._total_assumptions,
         }
 
 
