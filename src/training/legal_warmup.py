@@ -95,7 +95,7 @@ def run_legal_warmup(
             _logger.info("--- Domain: %s (target: %d) ---", domain, domain_target)
 
             try:
-                docs = load_legal_domain_batch(domain, max_documents=domain_target * 3)
+                docs = load_legal_domain_batch(domain=domain, max_documents=domain_target * 3)
             except Exception as e:
                 _logger.warning("Failed to load %s: %s", domain, e)
                 continue

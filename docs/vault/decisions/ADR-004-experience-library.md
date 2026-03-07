@@ -33,8 +33,14 @@ evolve_hypothesis(h, new_evidence, library, provider) -> tuple[Hypothesis, Exper
 query_similar(library, hypothesis_text, evidence, top_k) -> ExperienceLibrary
 ```
 
+## Implementation details
+
+- `EMPTY_LIBRARY: ExperienceLibrary = ()` -- named constant for the initial empty state
+- `query_similar()` uses Jaccard similarity (word-level intersection/union) to find relevant prior experiences
+- `_REFUTATION_DECAY = 0.2` -- confidence penalty applied when the LLM response is unparseable (treated as evidence of uncertainty)
+
 ## Files
 
-- `src/detective/experience.py` — ExperienceLibrary, Experience, add_experience, query_similar (planned)
-- `src/detective/evolution.py` — evolve_hypothesis, branching_rule (planned)
-- `src/detective/hypothesis.py` — Hypothesis dataclass (existing)
+- `src/detective/experience.py` -- ExperienceLibrary, Experience, EMPTY_LIBRARY, add_experience, query_similar
+- `src/detective/evolution.py` -- evolve_hypothesis, branching_rule, _REFUTATION_DECAY
+- `src/detective/hypothesis.py` -- Hypothesis dataclass

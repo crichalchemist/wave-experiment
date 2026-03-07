@@ -6,8 +6,8 @@ from typing import Protocol, runtime_checkable
 
 import networkx as nx
 
-from src.core.types import KnowledgeEdge, RelationType
-from src.data.knowledge_graph import PathResult, _EDGE_DATA_KEY, _HOP_DECAY, n_hop_paths
+from src.core.types import KnowledgeEdge, LegalDomain, RelationType
+from src.data.knowledge_graph import PathResult, _EDGE_DATA_KEY, n_hop_paths
 
 # ---------------------------------------------------------------------------
 # Named constants
@@ -39,6 +39,7 @@ class GraphStore(Protocol):
         target: str,
         relation: RelationType,
         confidence: float,
+        legal_domain: LegalDomain | None = None,
     ) -> None: ...
 
     def get_edge(self, source: str, target: str) -> KnowledgeEdge | None: ...
@@ -76,12 +77,14 @@ class InMemoryGraph:
         target: str,
         relation: RelationType,
         confidence: float,
+        legal_domain: LegalDomain | None = None,
     ) -> None:
         edge = KnowledgeEdge(
             source=source,
             target=target,
             relation=relation,
             confidence=confidence,
+            legal_domain=legal_domain,
         )
         self._graph.add_edge(source, target, **{_EDGE_DATA_KEY: edge})
 

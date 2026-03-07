@@ -42,19 +42,25 @@ New weights (4-component): `alpha=0.45, beta=0.25, gamma=0.15, delta=0.15`
 
 Confidence stays dominant (Constitution Principle 1: epistemic honesty). The 0.10 taken from confidence and welfare goes to trajectory urgency.
 
+## Curiosity scoring wired in
+
+As part of drift resolution, `score_hypothesis_curiosity()` is now called in the same `evolve_parallel()` loop as welfare and trajectory scoring. When `phi_metrics` is provided, each evolved hypothesis receives a `curiosity_relevance` value computed from the geometric mean of the lam_L and xi gradients. This completes the 4-weight `combined_score` formula: all four components (confidence, welfare_relevance, curiosity_relevance, trajectory_urgency) are now populated when `phi_metrics` is supplied.
+
+The curiosity call sits between `score_hypothesis_trajectory()` and the `replace()` call, keeping the same pattern as the other welfare scoring calls. No new lazy imports needed since `score_hypothesis_curiosity` is in the same `welfare_scoring` module.
+
 ## Consequences
 
 - `Hypothesis.trajectory_urgency: float = 0.0` — new frozen field, validated [0, 1]
 - `combined_score(delta=0.0)` is backward-compatible default
-- `evolve_parallel()` computes trajectory urgency when `phi_metrics` provided, uses 4-weight sort
+- `evolve_parallel()` computes welfare relevance, curiosity relevance, and trajectory urgency when `phi_metrics` provided, uses 4-weight sort
 - All tests mock `_get_trajectory_prediction` — no real forecaster in test suite
 - Graceful degradation: if forecaster fails, `score_hypothesis_trajectory` returns 0.0
 
 ## Files
 
 - `src/detective/hypothesis.py` — `trajectory_urgency` field + `delta` parameter
-- `src/inference/welfare_scoring.py` — `score_hypothesis_trajectory()`, `_get_forecaster()`, `_forecast_from_metrics()`
-- `src/detective/parallel_evolution.py` — 4-weight scoring in `evolve_parallel()`
+- `src/inference/welfare_scoring.py` — `score_hypothesis_trajectory()`, `score_hypothesis_curiosity()`, `_get_forecaster()`, `_forecast_from_metrics()`
+- `src/detective/parallel_evolution.py` — 4-weight scoring in `evolve_parallel()` (welfare, curiosity, trajectory all wired)
 - `tests/inference/test_trajectory_scoring.py` — 5 tests
-- `tests/detective/test_parallel_evolution.py` — 2 new tests
+- `tests/detective/test_parallel_evolution.py` — 3 new tests (trajectory urgency, 4-weight scoring, curiosity populated)
 - `tests/integration/test_bridge_pipeline.py` — end-to-end bridge tests

@@ -141,6 +141,7 @@ async def evolve_parallel(
             score_hypothesis_welfare,
             infer_threatened_constructs,
             score_hypothesis_trajectory,
+            score_hypothesis_curiosity,
         )
 
         for i, result in enumerate(results):
@@ -148,12 +149,14 @@ async def evolve_parallel(
             constructs = infer_threatened_constructs(h.text)
             welfare_score = score_hypothesis_welfare(h, phi_metrics)
             trajectory_urgency = score_hypothesis_trajectory(h, phi_metrics)
+            curiosity_score = score_hypothesis_curiosity(h, phi_metrics)
 
             # Create updated hypothesis with welfare fields
             updated_h = replace(
                 h,
                 welfare_relevance=welfare_score,
                 threatened_constructs=constructs,
+                curiosity_relevance=curiosity_score,
                 trajectory_urgency=trajectory_urgency,
             )
 

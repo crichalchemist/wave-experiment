@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from src.data.sourcing.types import SourceDocument
+from src.data.sourcing.types import SourceDocument, limit_results
 
 _logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ def _httpx_get(url: str, **kwargs: Any) -> Any:
 
 
 def load_courtlistener_batch(
+    *,
     case_name: str = "Maxwell",
     jurisdiction: str = "SDNY",
     max_documents: int = 100,
@@ -63,7 +64,7 @@ def load_courtlistener_batch(
     except Exception:
         return results
 
-    for item in data.get("results", [])[:max_documents]:
+    for item in data.get("results", []):
         text = item.get("plain_text", "").strip()
         if not text:
             continue
@@ -80,10 +81,10 @@ def load_courtlistener_batch(
             },
         ))
 
-    return results
+    return limit_results(results, max_documents)
 
 
-def load_fbi_vault_epstein(max_documents: int = 50) -> list[SourceDocument]:
+def load_fbi_vault_epstein(*, max_documents: int = 50) -> list[SourceDocument]:
     """
     Load publicly available FBI FOIA documents about the Epstein investigation.
 

@@ -35,6 +35,10 @@ This created three problems:
 - Frozen dataclass prevents accidental mutation of sourced documents
 - `DocumentLoader` Protocol enables structural typing — any callable with the right signature satisfies it without inheritance
 
+## Post-hoc conformance (2026-03-07)
+
+Protocol conformance was achieved post-hoc via ADR-DRIFT-RESOLVE item #12. All six loaders (`load_occrp_batch`, `load_iicsa_reports`, `load_github_public_foia`, `load_courtlistener_batch`, `load_hf_legal_batch`, `load_legal_domain_batch`) now use keyword-only parameters (via `*` separator) and wire `limit_results()` for truncation. `load_iicsa_reports` gained the previously missing `max_documents` parameter. `load_fbi_vault_epstein` also made keyword-only for consistency. A Protocol conformance test (`test_loaders_accept_max_documents_kwarg`) validates the contract at CI time.
+
 ## Files
 
 - `src/data/sourcing/types.py` (new)

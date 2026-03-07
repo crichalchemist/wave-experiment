@@ -4,7 +4,7 @@
 
 Full audit of detective-llm codebase. 22 issues found: 3 critical, 7 high, 6 medium, 6 low.
 
-**Remediation status: 22/22 fixed. Test suite: 763 passed, 0 failed, 2 skipped.**
+**Remediation status: 22/22 fixed. Test suite: 971 passed, 0 failed.**
 
 ---
 
@@ -18,9 +18,10 @@ Full audit of detective-llm codebase. 22 issues found: 3 critical, 7 high, 6 med
 
 ### BUG-002: Modules A/B/C are dead code
 - **Location:** `src/detective/module_a.py:66`, `module_b.py:80`, `module_c.py:99`
-- **Impact:** `detect_cognitive_biases()`, `detect_historical_determinism()`, `detect_geopolitical_presumptions()` never called from pipeline or any entry point. CLAUDE.md lists as "Working" — misleading
+- **Impact:** `detect_cognitive_biases()`, `detect_historical_determinism()`, `detect_geopolitical_presumptions()` never called from pipeline or any entry point. CLAUDE.md lists as "Working" -- misleading
 - **Fix:** Document accurately in CLAUDE.md (library functions, not pipeline-integrated). Keep for future wiring.
 - **Status:** FIXED
+- **Update (ADR-023):** A/B/C modules are now wired into the investigation agent's `_assumption_scan()` in the analyze phase. They are called on each unique document (max 5) during investigation runs, with counter-lead generation for detected assumptions. No longer dead code.
 
 ### BUG-003: Thread-unsafe global singleton
 - **Location:** `src/inference/welfare_scoring.py:540-549`
@@ -70,9 +71,10 @@ Full audit of detective-llm codebase. 22 issues found: 3 critical, 7 high, 6 med
 
 ### BUG-010: Overly broad exception handling
 - **Location:** `welfare_scoring.py:329,365,627`
-- **Impact:** Bare `except Exception` catches `KeyboardInterrupt` in Python <3.11. Swallows unexpected errors silently
+- **Impact:** Bare `except Exception` swallows unexpected errors silently
 - **Fix:** Replace with `except (FileNotFoundError, ValueError, OSError)` and `except (ImportError, ValueError, RuntimeError, OSError)`
 - **Status:** FIXED
+- **Correction:** The original description claimed `except Exception` catches `KeyboardInterrupt` in Python <3.11. This is incorrect -- `KeyboardInterrupt` inherits from `BaseException`, not `Exception`, in all Python versions. `except Exception` has never caught `KeyboardInterrupt`. The narrowing fix was still valid practice for avoiding accidental suppression of unexpected `Exception` subclasses.
 
 ---
 

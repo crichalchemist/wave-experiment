@@ -3,7 +3,7 @@ id: ADR-008
 title: Persistent graph store (replacing networkx in-memory copy-on-write)
 status: accepted
 date: 2026-02-17
-tags: [architecture, graph, persistence, neo4j, kuzu]
+tags: [architecture, graph, persistence, kuzu]
 ---
 
 # ADR-008: Persistent Knowledge Graph Store
@@ -23,7 +23,7 @@ Replace the current `networkx.DiGraph` copy-on-write implementation with a persi
 
 ## Recommended approach: Kuzu
 
-Kuzu is an embedded graph database — it runs in-process like SQLite, requires no server, is ACID-compliant, and supports a Cypher-compatible query language. It is the most appropriate choice for a single-machine investigation tool that needs persistence without operational overhead.
+Kuzu is an embedded graph database -- it runs in-process like SQLite, requires no server, is ACID-compliant, and supports a Cypher-compatible query language. It is the most appropriate choice for a single-machine investigation tool that needs persistence without operational overhead.
 
 Why not Neo4j as primary: requires a running server, adds operational complexity, and the community edition has limits that affect production use.
 
@@ -33,66 +33,58 @@ Why not SQLite: graph traversal (n-hop paths, pattern matching) requires recursi
 
 ```cypher
 -- Node types
-CREATE NODE TABLE Entity (
+CREATE NODE TABLE IF NOT EXISTS Entity (
     id STRING,
-    name STRING,
-    legal_domain STRING,  -- LegalDomain enum value
     PRIMARY KEY (id)
 );
 
 -- Edge (relationship) types
-CREATE REL TABLE KnowledgeEdge (
+CREATE REL TABLE IF NOT EXISTS Relationship (
     FROM Entity TO Entity,
-    relation STRING,          -- RelationType enum value
-    confidence DOUBLE,
-    hop_count INT64
-);
-
--- Gap findings
-CREATE NODE TABLE GapFinding (
-    id STRING,
-    gap_type STRING,          -- GapType enum value
-    description STRING,
-    confidence DOUBLE,
-    location STRING,
-    run_id STRING,            -- links gap to analysis run
-    PRIMARY KEY (id)
+    relation STRING,
+    confidence DOUBLE
 );
 ```
 
+Entity has only an `id STRING` primary key. Relationship carries `relation STRING` (RelationType enum value) and `confidence DOUBLE`. No `name`, `legal_domain`, `hop_count`, or `GapFinding` table -- those were from an earlier design that was never implemented.
+
 ## Abstraction strategy
 
-The `KnowledgeGraph` type alias and all public functions in `src/data/knowledge_graph.py` must remain unchanged from the caller's perspective. The Kuzu implementation is a drop-in replacement behind the same functional interface.
+Two concrete implementations behind a `GraphStore` Protocol defined in `src/data/graph_store.py`:
 
-Two concrete implementations:
-1. `InMemoryGraph` — wraps `networkx.DiGraph` (tests, ephemeral analysis)
-2. `KuzuGraph` — wraps a Kuzu database connection (production, persistent)
+1. `InMemoryGraph` -- wraps `networkx.DiGraph` (tests, ephemeral analysis)
+2. `KuzuGraph` -- wraps a Kuzu database connection (production, persistent)
 
-Both implement a `GraphStore` Protocol:
+Both implement the `GraphStore` Protocol:
 ```python
 @runtime_checkable
 class GraphStore(Protocol):
     def add_edge(self, source: str, target: str, relation: RelationType, confidence: float) -> None: ...
     def get_edge(self, source: str, target: str) -> KnowledgeEdge | None: ...
-    def n_hop_paths(self, source: str, target: str, max_hops: int) -> list[PathResult]: ...
-    def persist(self) -> None: ...  # no-op for in-memory
+    def n_hop_paths(self, source: str, target: str, max_hops: int = 3) -> list[PathResult]: ...
+    def successors(self, entity: str) -> list[str]: ...
+    def nodes(self) -> list[str]: ...
 ```
 
-Note: The persistent store moves from pure functional (copy-on-write) to mutable-with-protocol because true graph persistence requires mutation. The functional wrapper functions in `knowledge_graph.py` become thin adapters over the mutable `GraphStore`.
+Note: no `persist()` method. Kuzu persists automatically (embedded database); InMemoryGraph is ephemeral by design.
+
+`KuzuGraph` additionally provides:
+- `bulk_add_edges(edges)` -- batch insert for faster ingestion (collects unique nodes, MERGEs all, then creates edges)
+- `close()` -- release database/connection handles
+
+`graph_store_from_env()` factory function in `src/data/graph_store.py` selects the backend based on `DETECTIVE_GRAPH_BACKEND`.
+
+## Dependency note
+
+`kuzu` is imported with `try/except ImportError` in `src/data/kuzu_graph.py`. It is not declared in `pyproject.toml` optional dependencies. Users must install it manually (`pip install kuzu`) to use the Kuzu backend.
 
 ## Environment configuration
 
-`GRAPH_STORE=memory|kuzu` selects the implementation.
-`GRAPH_DB_PATH` sets the Kuzu database directory (default: `data/graph.kuzu`).
-
-## Migration plan
-
-Phase 1 (current): `InMemoryGraph` (networkx) — all tests pass, no persistence
-Phase 2 (Task 29): Add `GraphStore` Protocol + `InMemoryGraph` wrapper — refactor `knowledge_graph.py` to use it
-Phase 3 (Task 30): Implement `KuzuGraph` — add kuzu as optional dependency, wire to `graph_store_from_env()`
+`DETECTIVE_GRAPH_BACKEND=memory|kuzu` selects the implementation (default: `memory`).
+`DETECTIVE_KUZU_PATH` sets the Kuzu database directory. **Required** when backend is `kuzu` -- raises `ValueError` if not set (no default).
 
 ## Files
 
-- `src/data/knowledge_graph.py` — refactor to use GraphStore Protocol (Task 29)
-- `src/data/kuzu_graph.py` — KuzuGraph implementation (Task 30)
-- `pyproject.toml` — add `kuzu>=0.5.0` to optional dependencies
+- `src/data/graph_store.py` -- GraphStore Protocol, InMemoryGraph, `graph_store_from_env()` factory
+- `src/data/kuzu_graph.py` -- KuzuGraph implementation (persistent, embedded)
+- `src/data/knowledge_graph.py` -- shared `PathResult`, `n_hop_paths()`, `_HOP_DECAY` (used by both backends)

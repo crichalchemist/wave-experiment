@@ -5,6 +5,7 @@ from src.core.types import (
     Gap,
     GapType,
     KnowledgeEdge,
+    LegalDomain,
     RelationType,
 )
 
@@ -107,3 +108,43 @@ def test_gap_welfare_impact_validation():
             location="doc.pdf",
             welfare_impact=-1.0,
         )
+
+
+# ---------------------------------------------------------------------------
+# LegalDomain on KnowledgeEdge
+# ---------------------------------------------------------------------------
+
+
+def test_legal_domain_enum_contains_required_members() -> None:
+    required = {
+        LegalDomain.STATUTE, LegalDomain.REGULATION, LegalDomain.CASE_LAW,
+        LegalDomain.ENFORCEMENT_PRACTICE, LegalDomain.COMMUNITY_EXPERIENCE,
+        LegalDomain.TREATY, LegalDomain.TERRITORIAL,
+    }
+    assert required.issubset(set(LegalDomain))
+
+
+def test_knowledge_edge_legal_domain_optional() -> None:
+    """legal_domain defaults to None for backward compatibility."""
+    edge = KnowledgeEdge(
+        source="A", target="B", relation=RelationType.CAUSAL, confidence=0.8,
+    )
+    assert edge.legal_domain is None
+
+
+def test_knowledge_edge_legal_domain_set() -> None:
+    edge = KnowledgeEdge(
+        source="A", target="B", relation=RelationType.CAUSAL, confidence=0.8,
+        legal_domain=LegalDomain.STATUTE,
+    )
+    assert edge.legal_domain == LegalDomain.STATUTE
+
+
+def test_knowledge_edge_legal_domain_all_values() -> None:
+    """Every LegalDomain value can be assigned to a KnowledgeEdge."""
+    for domain in LegalDomain:
+        edge = KnowledgeEdge(
+            source="A", target="B", relation=RelationType.CAUSAL,
+            confidence=0.5, legal_domain=domain,
+        )
+        assert edge.legal_domain == domain

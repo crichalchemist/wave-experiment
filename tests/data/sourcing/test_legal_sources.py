@@ -24,7 +24,7 @@ def test_load_legal_domain_batch_returns_list():
     ]))
 
     with patch("src.data.sourcing.legal_sources.load_dataset", return_value=mock_ds):
-        results = load_legal_domain_batch("criminal_justice", max_documents=5)
+        results = load_legal_domain_batch(domain="criminal_justice", max_documents=5)
 
     assert isinstance(results, list)
     assert len(results) >= 1
@@ -36,4 +36,4 @@ def test_load_legal_domain_batch_unknown_domain():
     from src.data.sourcing.legal_sources import load_legal_domain_batch
     import pytest
     with pytest.raises(ValueError, match="Unknown legal domain"):
-        load_legal_domain_batch("unknown_domain")
+        load_legal_domain_batch(domain="unknown_domain")

@@ -30,11 +30,13 @@ Hop decay: CO_MENTIONED 0.6, ASSOCIATED 0.8. Co-mention decays fast because same
 
 ### Adapter layer
 
-`src/data/epstein_adapter.py` provides frozen dataclasses (`EpsteinPage`, `EpsteinAnalysis`) and functions for parsing, normalization, and iteration. `iter_pages()` walks `results/IMAGES001-12/` yielding normalized pages; `load_analyses()` parses the document-level analysis dict.
+`src/data/epstein_adapter.py` provides frozen dataclasses (`EpsteinPage`, `EpsteinAnalysis`) and functions for parsing, normalization, and iteration. `iter_pages()` walks all subdirectories under `results/` generically (using `sorted(results_dir.iterdir())` -- not hardcoded to `IMAGES001-12/`), yielding normalized pages. `load_analyses()` parses the document-level analysis dict.
 
 ### Ingestion pipeline
 
-`src/data/ingest_epstein.py` drives the two-phase ingestion:
+`src/data/ingest_epstein.py` drives the ingestion. Layer 2 fuzzy dedup now routes through `build_entity_mappings_minhash()` from `src/data/dedup.py` (ADR-026), which delegates to `build_fuzzy_mappings()` only for sets smaller than 500 entities. Bulk edge buffering uses `_BULK_FLUSH_SIZE = 5_000` to bound memory during large ingestions.
+
+Two-phase ingestion:
 
 1. **Page-level co-mentions** — for each page with ≥2 people, create bidirectional CO_MENTIONED edges between all person-person pairs (confidence 0.5).
 2. **Analysis-level associations** — for each document analysis with ≥2 key_people, create bidirectional ASSOCIATED edges (confidence 0.8).

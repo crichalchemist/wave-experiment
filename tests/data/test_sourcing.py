@@ -1,5 +1,4 @@
 """Tests for dataset sourcing pipeline."""
-from unittest.mock import MagicMock
 
 
 # --- Task 3a: HuggingFace Loader ---
@@ -174,3 +173,29 @@ def test_international_loader_returns_list(monkeypatch):
 def test_github_foia_loader_import():
     from src.data.sourcing.international_loader import load_github_public_foia
     assert callable(load_github_public_foia)
+
+
+# --- Protocol conformance ---
+
+def test_loaders_accept_max_documents_kwarg():
+    """All DocumentLoader functions must accept max_documents as keyword-only."""
+    import inspect
+
+    from src.data.sourcing.international_loader import (
+        load_occrp_batch, load_iicsa_reports, load_github_public_foia,
+    )
+    from src.data.sourcing.doj_loader import load_courtlistener_batch
+    from src.data.sourcing.hf_loader import load_hf_legal_batch
+    from src.data.sourcing.legal_sources import load_legal_domain_batch
+
+    loaders = [
+        load_occrp_batch, load_iicsa_reports, load_github_public_foia,
+        load_courtlistener_batch, load_hf_legal_batch, load_legal_domain_batch,
+    ]
+    for loader in loaders:
+        sig = inspect.signature(loader)
+        assert "max_documents" in sig.parameters, f"{loader.__name__} missing max_documents"
+        param = sig.parameters["max_documents"]
+        assert param.kind == inspect.Parameter.KEYWORD_ONLY, (
+            f"{loader.__name__}: max_documents should be keyword-only"
+        )

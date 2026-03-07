@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from src.data.sourcing.types import SourceDocument
+from src.data.sourcing.types import SourceDocument, limit_results
 
 _logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ def _httpx_get(url: str, **kwargs: Any) -> Any:
 
 
 def load_occrp_batch(
+    *,
     query: str = "Epstein Maxwell network",
     max_documents: int = 50,
 ) -> list[SourceDocument]:
@@ -59,10 +60,10 @@ def load_occrp_batch(
         # Returns metadata-only for now; full text requires HTML parsing
     except Exception:
         _logger.debug("OCCRP search failed")
-    return results
+    return limit_results(results, max_documents)
 
 
-def load_iicsa_reports() -> list[SourceDocument]:
+def load_iicsa_reports(*, max_documents: int = 50) -> list[SourceDocument]:
     """
     Load UK IICSA published reports (public government documents).
 
@@ -76,10 +77,11 @@ def load_iicsa_reports() -> list[SourceDocument]:
         # Production: parse PDF report links, OCR, normalize
     except Exception:
         _logger.debug("IICSA reports fetch failed")
-    return results
+    return limit_results(results, max_documents)
 
 
 def load_github_public_foia(
+    *,
     query: str = "Epstein FOIA documents",
     max_documents: int = 20,
 ) -> list[SourceDocument]:
@@ -115,4 +117,4 @@ def load_github_public_foia(
             ))
     except Exception:
         _logger.debug("GitHub FOIA search failed")
-    return results
+    return limit_results(results, max_documents)

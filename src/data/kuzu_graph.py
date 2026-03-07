@@ -8,10 +8,9 @@ local directory, similar to SQLite.
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
-from src.core.types import KnowledgeEdge, RelationType
+from src.core.types import KnowledgeEdge, LegalDomain, RelationType
 from src.data.knowledge_graph import PathResult, _HOP_DECAY
 
 try:
@@ -46,7 +45,7 @@ def _init_schema(conn: object) -> None:
     conn.execute(  # type: ignore[union-attr]
         f"CREATE REL TABLE IF NOT EXISTS {_EDGE_TABLE} "
         f"(FROM {_NODE_TABLE} TO {_NODE_TABLE}, "
-        f"relation STRING, confidence DOUBLE)"
+        f"relation STRING, confidence DOUBLE, legal_domain STRING DEFAULT '')"
     )
 
 
@@ -95,6 +94,7 @@ class KuzuGraph:
         target: str,
         relation: RelationType,
         confidence: float,
+        legal_domain: LegalDomain | None = None,
     ) -> None:
         """
         Upsert source node, target node, and the directed relationship between them.
@@ -110,15 +110,18 @@ class KuzuGraph:
             f"MERGE (n:{_NODE_TABLE} {{id: $id}})",
             {"id": target},
         )
+        ld_value = legal_domain.value if legal_domain is not None else ""
         self._conn.execute(
             f"MATCH (s:{_NODE_TABLE}), (t:{_NODE_TABLE}) "
             f"WHERE s.id = $src AND t.id = $tgt "
-            f"MERGE (s)-[r:{_EDGE_TABLE} {{relation: $rel, confidence: $conf}}]->(t)",
+            f"MERGE (s)-[r:{_EDGE_TABLE} {{relation: $rel, confidence: $conf, "
+            f"legal_domain: $ld}}]->(t)",
             {
                 "src": source,
                 "tgt": target,
                 "rel": relation.value,
                 "conf": confidence,
+                "ld": ld_value,
             },
         )
 
@@ -130,7 +133,7 @@ class KuzuGraph:
         result = self._conn.execute(
             f"MATCH (s:{_NODE_TABLE})-[r:{_EDGE_TABLE}]->(t:{_NODE_TABLE}) "
             f"WHERE s.id = $src AND t.id = $tgt "
-            f"RETURN r.relation, r.confidence",
+            f"RETURN r.relation, r.confidence, r.legal_domain",
             {"src": source, "tgt": target},
         )
         if not result.has_next():
@@ -138,12 +141,15 @@ class KuzuGraph:
         row = result.get_next()
         relation_str: str = row[0]
         confidence: float = row[1]
+        ld_str: str = row[2]
+        ld = LegalDomain(ld_str) if ld_str else None
         return KnowledgeEdge(
             source=source,
             target=target,
             relation=RelationType(relation_str),
             confidence=confidence,
             hop_count=1,
+            legal_domain=ld,
         )
 
     def successors(self, entity: str) -> list[str]:
@@ -193,7 +199,7 @@ class KuzuGraph:
 
         # Phase 1: collect and MERGE all unique node IDs
         node_ids: set[str] = set()
-        for src, tgt, _rel, _conf in edges:
+        for src, tgt, _rel, _conf, *_ in edges:
             node_ids.add(src)
             node_ids.add(tgt)
 
@@ -204,12 +210,14 @@ class KuzuGraph:
             )
 
         # Phase 2: MERGE all edges (nodes guaranteed to exist)
-        for src, tgt, rel, conf in edges:
+        for edge_tuple in edges:
+            src, tgt, rel, conf = edge_tuple[:4]
             self._conn.execute(
                 f"MATCH (s:{_NODE_TABLE}), (t:{_NODE_TABLE}) "
                 f"WHERE s.id = $src AND t.id = $tgt "
-                f"MERGE (s)-[r:{_EDGE_TABLE} {{relation: $rel, confidence: $conf}}]->(t)",
-                {"src": src, "tgt": tgt, "rel": rel.value, "conf": conf},
+                f"MERGE (s)-[r:{_EDGE_TABLE} {{relation: $rel, confidence: $conf, "
+                f"legal_domain: $ld}}]->(t)",
+                {"src": src, "tgt": tgt, "rel": rel.value, "conf": conf, "ld": ""},
             )
 
     def close(self) -> None:

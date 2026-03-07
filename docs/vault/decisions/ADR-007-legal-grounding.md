@@ -22,22 +22,27 @@ The gap between them is not incidental — it is systemic and documented. Ignori
 
 ## Implementation in gap detection
 
-The knowledge graph schema includes `LegalContext` entity type with a mandatory `legal_domain` field:
+`LegalDomain` is an enum in `src/core/types.py` with 7 values:
 
 ```python
 class LegalDomain(Enum):
-    STATUTE = "statute"                  # Black-letter law, codified text
-    REGULATION = "regulation"            # Federal/state agency rules
-    CASE_LAW = "case_law"                # Court holdings and precedent
-    ENFORCEMENT_PRACTICE = "enforcement_practice"  # What actually happens
-    COMMUNITY_EXPERIENCE = "community_experience"  # Documented lived reality
-    TREATY = "treaty"                    # Federal Indian law, territorial agreements
-    TERRITORIAL = "territorial"          # Law in US territories (often different from states)
+    STATUTE = "statute"                          # Black-letter law, codified text
+    REGULATION = "regulation"                    # Federal/state agency rules
+    CASE_LAW = "case_law"                        # Court holdings and precedent
+    ENFORCEMENT_PRACTICE = "enforcement_practice"  # What regulators/police actually do
+    COMMUNITY_EXPERIENCE = "community_experience"  # Documented lived reality of those affected
+    TREATY = "treaty"                            # Federal Indian law, territorial agreements
+    TERRITORIAL = "territorial"                  # Law as it applies in US territories
 ```
 
-A gap between `STATUTE` and `ENFORCEMENT_PRACTICE` nodes for the same legal topic is a `GapType.DOCTRINAL` finding — the law assumes its own enforcement, which may never have occurred for this population in this jurisdiction.
+Legal domain is an **edge-level** property, not a node-level one. Entities don't inherently belong to a legal domain — they *appear in* legal domain contexts. `KnowledgeEdge` carries an optional `legal_domain: LegalDomain | None` field (defaults to `None` for backward compatibility).
 
-A gap between `STATUTE` and `COMMUNITY_EXPERIENCE` is a `GapType.NORMATIVE` finding — the law's stated obligations are not being met.
+The `GraphStore` Protocol's `add_edge()` method accepts `legal_domain` as an optional parameter. Both `InMemoryGraph` and `KuzuGraph` store and retrieve it.
+
+**Gap detection** is implemented in `src/detective/legal_gap_detector.py`:
+- `detect_legal_domain_gaps(graph, entity)` collects edges touching an entity, partitions them into "written" domains (`STATUTE`, `REGULATION`, `CASE_LAW`, `TREATY`, `TERRITORIAL`) and "applied" domains (`ENFORCEMENT_PRACTICE`, `COMMUNITY_EXPERIENCE`).
+- Written edges without applied → `GapType.DOCTRINAL` finding: the law assumes its own enforcement, which may never have occurred for this population in this jurisdiction.
+- Applied edges without written → `GapType.NORMATIVE` finding: enforcement without documented legal basis is investigatively significant.
 
 ## Geographic and jurisdictional scope
 
@@ -53,13 +58,20 @@ When analyzing legal claims, the system must ask: *from whose position is this a
 
 ## Knowledge graph implications
 
-- `LegalDomain` is added to `src/core/types.py` as an enum
-- Edges between legal entities carry `LegalDomain` on both source and target
-- A query for gaps between STATUTE and ENFORCEMENT_PRACTICE nodes triggers a normative gap check
-- Community experience nodes (`COMMUNITY_EXPERIENCE`) are first-class entities, not annotations on other entities
+- `LegalDomain` is defined in `src/core/types.py` as an enum with 7 values
+- `KnowledgeEdge.legal_domain` is an optional field (`LegalDomain | None`, default `None`)
+- `GraphStore.add_edge()` accepts `legal_domain` as an optional keyword argument
+- Both `InMemoryGraph` and `KuzuGraph` (persistent, embedded) store and retrieve legal domain
+- `KuzuGraph` stores legal domain as a `STRING` column (`DEFAULT ''`) — empty string maps to `None`
+- The investigation agent's `_enrich_phase()` extracts `legal_domain` from `DocumentEvidence.metadata` and passes it to `graph.add_edge()`
+- `detect_legal_domain_gaps()` is a query function that finds entities with asymmetric legal domain coverage
 
 ## Files
 
-- `src/core/types.py` — add `LegalDomain` enum
+- `src/core/types.py` — `LegalDomain` enum, `KnowledgeEdge.legal_domain` field
+- `src/data/graph_store.py` — `GraphStore` Protocol and `InMemoryGraph` with `legal_domain` support
+- `src/data/kuzu_graph.py` — `KuzuGraph` with `legal_domain` column in Relationship table
+- `src/detective/legal_gap_detector.py` — `LegalGap` frozen dataclass, `detect_legal_domain_gaps()` function
+- `src/detective/investigation/agent.py` — `_enrich_phase()` wires legal domain from document metadata
 - `docs/constitution.md` — legal grounding section (lex_glue scotus dataset used for warmup; 232 DPO pairs generated)
 - `docs/vault/decisions/ADR-007-legal-grounding.md` — this document

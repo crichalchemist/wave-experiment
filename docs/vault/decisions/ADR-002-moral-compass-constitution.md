@@ -24,7 +24,16 @@ The constitution is:
 
 Using Claude (external, different model) as critic produces stronger critiques than same-model self-critique. The separation of generator (local vLLM) and critic (Azure Foundry Claude) is architecturally superior.
 
+## Implementation
+
+- `src/detective/constitution.py` provides `load_constitution()`, `critique_against_constitution()`, and `generate_preference_pair()`. Constitution path is configurable via `DETECTIVE_CONSTITUTION_PATH` env var (default: `docs/constitution.md`).
+- `PreferencePair` is a frozen dataclass with `instruction`, `rejected` (original analysis), and `chosen` (revised analysis) fields.
+- `src/security/prompt_guard.py` provides `build_mentor_critique_prompt()` (mentor-framed critique for Claude as trusted guide) and `build_revision_prompt()` (frames mentor guidance as internalization, not compliance).
+- `src/training/constitutional_warmup.py` is a full implementation of the constitution-first training pipeline: document -> local model analysis -> Claude critique -> revised analysis -> DPO pair.
+
 ## Files
 
-- `docs/constitution.md` — the moral compass document
-- `src/detective/constitution.py` — CAI self-critique loop implementation (planned)
+- `docs/constitution.md` -- the moral compass document
+- `src/detective/constitution.py` -- load_constitution, critique_against_constitution, PreferencePair, generate_preference_pair
+- `src/security/prompt_guard.py` -- build_analysis_prompt, build_critique_prompt, build_mentor_critique_prompt, build_revision_prompt
+- `src/training/constitutional_warmup.py` -- constitutional warmup pipeline (ConstitutionalWarmupConfig, run_constitutional_warmup)

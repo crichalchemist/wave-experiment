@@ -36,7 +36,8 @@ Corpus text
 - **Min run length = 3**: a pattern needs at least 3 consecutive chunks to be real, not noise
 - **Change threshold = 0.15**: construct must change by at least 0.15 total across the run
 - **Deduplication by label**: only one pattern per construct-direction pair (e.g., one "declining_lam_L")
-- **No derivatives in src compute_phi**: `welfare_scoring.py:compute_phi()` doesn't accept derivatives. The Space's `welfare.py` does. Scenarios generated in src use the simpler formula; recovery-aware floors activate during forecaster training in the Space.
+- **Derivatives not passed in scenario extraction**: `welfare_scoring.py:compute_phi()` accepts an optional `derivatives: Optional[Dict[str, float]] = None` parameter, but scenario extraction calls it without derivatives (passing only construct metrics). The Space's `welfare.py` provides the same formula. Recovery-aware floors activate when derivatives are supplied during forecaster training in the Space.
+- **Noise calibration**: synthetic trajectory noise is scaled proportional to the magnitude of construct changes in the extracted pattern.
 
 ## The data flywheel
 

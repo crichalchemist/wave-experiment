@@ -1,6 +1,5 @@
 """Tests for parallel hypothesis evolution (GoT Generate(k))."""
 import asyncio
-import pytest
 from unittest.mock import MagicMock
 
 
@@ -275,3 +274,31 @@ def test_backward_compatible_without_phi_metrics():
     for result in results:
         assert result.hypothesis.welfare_relevance == 0.0
         assert result.hypothesis.threatened_constructs == ()
+
+
+def test_curiosity_populated_with_phi_metrics():
+    """When phi_metrics provided, curiosity_relevance should be non-default."""
+    from src.detective.hypothesis import Hypothesis
+    from src.detective.parallel_evolution import evolve_parallel
+    from src.core.providers import MockProvider
+
+    h = Hypothesis.create("Love and truth are under threat in this investigation", 0.5)
+
+    # phi_metrics with low lam_L (love) and xi (truth) to trigger curiosity
+    phi_metrics = {
+        "c": 0.8, "lam_P": 0.7, "lam_L": 0.2, "xi": 0.3,
+        "psi": 0.6, "omega": 0.5, "kappa": 0.7, "alpha": 0.6,
+    }
+
+    provider = MockProvider(response="confirmed\nconfidence: 0.7")
+    results = asyncio.run(evolve_parallel(
+        hypothesis=h,
+        evidence_list=["Evidence about love and truth threats"],
+        provider=provider,
+        k=1,
+        phi_metrics=phi_metrics,
+    ))
+
+    assert len(results) == 1
+    evolved = results[0].hypothesis
+    assert evolved.curiosity_relevance > 0.0, "curiosity_relevance should be populated"

@@ -24,8 +24,9 @@ Routing at the provider level (not the call site) means zero changes to existing
 ## Implementation
 
 - `classify_prompt(prompt)` matches 4 regex patterns against prompt text, returns `"scoring"` or `"reasoning"`
-- `HybridRoutingProvider` — mutable dataclass wrapping `VLLMProvider` (scoring) + `AzureFoundryProvider` (reasoning)
-- Circuit breaker: on first scoring failure, `_scoring_available` flips `False`; all subsequent scoring calls route to Azure until `reset_fallback()` is called
+- `HybridRoutingProvider` -- mutable dataclass wrapping `VLLMProvider` (scoring) + `AzureFoundryProvider` (reasoning)
+- Circuit breaker with auto-recovery: on first scoring failure, `_scoring_available` flips `False` and `_circuit_opened_at` records the timestamp. After `_circuit_breaker_cooldown` seconds (default 60s), the next scoring call automatically retries the local provider. `reset_fallback()` remains available for manual recovery.
+- TraceStore integration: when `_trace_store` is set, every `complete()` call records a `ReasoningTrace` with timing, route classification, and parsed score (see ADR-014)
 - `provider_from_env()` supports `DETECTIVE_PROVIDER=hybrid`
 - vLLM runs as a Docker container: `vllm/vllm-openai-cpu:latest-x86_64` on port 8100, serving `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` with `--dtype float32`
 

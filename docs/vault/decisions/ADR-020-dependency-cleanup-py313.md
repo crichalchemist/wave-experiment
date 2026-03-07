@@ -10,17 +10,18 @@ tags: [dependencies, python-3.13, maintenance]
 
 ## Decision
 
-Remove 4 unused dependencies, explicitly declare 5 transitive dependencies, and modernize deprecated Python patterns to prepare for Python 3.13.
+Remove 3 permanently unused dependencies (plus spaCy, later re-added as optional for ADR-025), explicitly declare 5 transitive dependencies, and modernize deprecated Python patterns to prepare for Python 3.13.
 
 ## Context
 
 A dependency audit (2026-03-05) compared `pyproject.toml` declarations against actual imports in `src/` and found:
 
-**4 packages declared but never imported:**
-- `pdfplumber` — PDF handling uses `pdf2image` + `pytesseract` (in `[scraping]` extras), not pdfplumber
-- `llama-index` — retrieval pipeline was never built; knowledge graph uses custom `GraphStore`
-- `spacy` — entity extraction uses regex patterns + LLM scoring, not spaCy NER
-- `azure-ai-inference` — Azure integration uses `urllib.request` (stdlib) via `AzureFoundryProvider`
+**3 packages permanently removed (1 re-added as optional):**
+- `pdfplumber` -- PDF handling uses `pdf2image` + `pytesseract` (in `[scraping]` extras), not pdfplumber
+- `llama-index` -- retrieval pipeline was never built; knowledge graph uses custom `GraphStore`
+- `azure-ai-inference` -- Azure integration uses `urllib.request` (stdlib) via `AzureFoundryProvider`
+
+**Note:** `spacy` was removed in this cleanup but was later re-introduced as an optional dependency `[ner]` for the spaCy NER pipeline (ADR-025). It is no longer a mandatory dependency but is available via `pip install -e ".[ner]"`.
 
 **5 packages imported but only present as transitive dependencies:**
 - `numpy` — used in 5 forecasting/inference modules (arrays, RNG, linear algebra)
@@ -39,7 +40,7 @@ A dependency audit (2026-03-05) compared `pyproject.toml` declarations against a
 
 ## Consequences
 
-- ~700MB reduction in install footprint (spaCy alone is ~500MB with models)
+- ~700MB reduction in mandatory install footprint (spaCy is ~500MB with models but is now optional via `[ner]`)
 - Transitive-to-direct promotion prevents silent breakage if upstream drops sub-dependencies
 - Zero `DeprecationWarning` emissions on Python 3.12/3.13
 - `requires-python = ">=3.12"` remains the floor; 3.13 is fully compatible

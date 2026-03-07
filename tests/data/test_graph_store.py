@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import os
-
 import pytest
 
-from src.core.types import KnowledgeEdge, RelationType
-from src.data.knowledge_graph import PathResult, _HOP_DECAY
+from src.core.types import LegalDomain, RelationType
+from src.data.knowledge_graph import _HOP_DECAY
 from src.data.graph_store import (
     GraphStore,
     InMemoryGraph,
@@ -144,3 +142,40 @@ def test_graph_store_from_env_unknown_raises(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv(_GRAPH_BACKEND_ENV, "kuzu")
     with pytest.raises(ValueError, match="kuzu"):
         graph_store_from_env()
+
+
+# ---------------------------------------------------------------------------
+# legal_domain on edges
+# ---------------------------------------------------------------------------
+
+
+def test_add_edge_with_legal_domain() -> None:
+    """Edges can carry an optional legal domain annotation."""
+    g = InMemoryGraph()
+    g.add_edge("A", "B", RelationType.CAUSAL, 0.9, legal_domain=LegalDomain.STATUTE)
+    edge = g.get_edge("A", "B")
+    assert edge is not None
+    assert edge.legal_domain == LegalDomain.STATUTE
+
+
+def test_add_edge_legal_domain_default_none() -> None:
+    """Backward compatibility: edges without legal_domain default to None."""
+    g = InMemoryGraph()
+    g.add_edge("A", "B", RelationType.CAUSAL, 0.9)
+    edge = g.get_edge("A", "B")
+    assert edge is not None
+    assert edge.legal_domain is None
+
+
+def test_edges_with_different_legal_domains() -> None:
+    """Same entity pair can appear in different legal domain contexts."""
+    g = InMemoryGraph()
+    g.add_edge("Corp", "Agency", RelationType.CAUSAL, 0.8, legal_domain=LegalDomain.STATUTE)
+    # Note: networkx overwrites same-direction edge, so use different pairs
+    g.add_edge("Agency", "Corp", RelationType.CAUSAL, 0.6, legal_domain=LegalDomain.ENFORCEMENT_PRACTICE)
+
+    statute_edge = g.get_edge("Corp", "Agency")
+    enforcement_edge = g.get_edge("Agency", "Corp")
+
+    assert statute_edge is not None and statute_edge.legal_domain == LegalDomain.STATUTE
+    assert enforcement_edge is not None and enforcement_edge.legal_domain == LegalDomain.ENFORCEMENT_PRACTICE

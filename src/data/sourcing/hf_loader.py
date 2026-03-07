@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from src.data.sourcing.types import SourceDocument
+from src.data.sourcing.types import SourceDocument, limit_results
 
 _logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ except ImportError:
 
 
 def load_hf_legal_batch(
+    *,
     dataset_name: str,
     split: str = "train",
     max_documents: int = 200,
@@ -59,4 +60,4 @@ def load_hf_legal_batch(
             },
         ))
 
-    return results
+    return limit_results(results, max_documents)

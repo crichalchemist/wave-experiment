@@ -594,14 +594,30 @@ class InvestigationAgent:
         return llm_calls, new_findings, len(evolved_hypotheses)
 
     def _enrich_phase(self, docs: list[DocumentEvidence]) -> int:
-        """Extract entities from documents and add edges to graph."""
-        from src.core.types import RelationType
+        """Extract entities from documents and add edges to graph.
+
+        When a document's metadata includes a ``legal_domain`` key, the
+        extracted edges carry that domain annotation so legal gap detection
+        (ADR-007) can identify written-vs-applied gaps.
+        """
+        from src.core.types import LegalDomain, RelationType
         from src.data.ner import extract_entities
 
         edges_added = 0
         all_entities: list[str] = []
+        doc_legal_domain: LegalDomain | None = None
 
         for doc in docs:
+            # Extract legal_domain from document metadata if present
+            doc_legal_domain = None
+            for key, value in doc.metadata:
+                if key == "legal_domain":
+                    try:
+                        doc_legal_domain = LegalDomain(value)
+                    except ValueError:
+                        pass
+                    break
+
             ner_result = extract_entities(doc.text)
             for ent in ner_result.entities:
                 if ent.label in ("PERSON", "ORG"):
@@ -620,6 +636,7 @@ class InvestigationAgent:
                         target=other,
                         relation=RelationType.CO_MENTIONED,
                         confidence=0.5,
+                        legal_domain=doc_legal_domain,
                     )
                     edges_added += 1
             seen.append(entity)
@@ -864,7 +881,7 @@ class InvestigationAgent:
     def _audit_phase(self) -> tuple[PersonAuditSummary, ...]:
         """Optional post-processing: audit top entities from findings.
 
-        Budget-aware: only audits when budget allows, limits to top 5 entities.
+        Post-loop audit: runs during report building, limits to top 5 entities.
         """
         _MAX_AUDIT_ENTITIES: int = 5
 

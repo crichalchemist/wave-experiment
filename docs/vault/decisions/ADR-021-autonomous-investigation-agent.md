@@ -30,7 +30,7 @@ Key requirements:
 ```
 src/detective/investigation/
     __init__.py              — re-exports InvestigationAgent, key types
-    types.py                 — 10 frozen dataclasses (config, budget, lead, step, finding, report)
+    types.py                 — 12 frozen dataclasses (config, budget, lead, step, finding, report, AssumptionDetection, AssumptionScanResult from ADR-023, PersonAuditSummary from ADR-027)
     source_protocol.py       — InvestigationSource Protocol + FOIA/Graph adapters
     planner.py               — LLM-assisted lead generation + hypothesis seeding
     agent.py                 — InvestigationAgent: core async loop + BudgetTracker
@@ -80,14 +80,16 @@ class InvestigationSource(Protocol):
 ## Consequences
 
 - **Positive**: Full automation of the investigation cycle; budget safety prevents runaway costs; constitutional oversight prevents epistemic overreach; injection-as-finding turns attacks into intelligence; Protocol-based sources are trivially extensible
-- **Positive**: 74 new tests, full suite at 837 passing
+- **Positive**: Document dedup in `_gather_phase()` via MinHash/LSH (ADR-026) skips near-duplicate evidence
+- **Positive**: `_audit_phase()` runs person audits on top 5 entities from findings, producing `PersonAuditSummary` included in `InvestigationReport.person_audits` (ADR-027)
+- **Positive**: 74 new tests in initial implementation, full suite now at 971 passing
 - **Negative**: Agent loop has many moving parts — debugging requires understanding all 6 phases
 - **Risk**: LLM-generated leads may produce low-quality queries — mitigated by fallback lead generation
 
 ## Files
 
 - `src/detective/investigation/__init__.py` — re-exports
-- `src/detective/investigation/types.py` — frozen data model (10 types)
+- `src/detective/investigation/types.py` -- frozen data model (12 types)
 - `src/detective/investigation/source_protocol.py` — Protocol + 2 adapters + builder
 - `src/detective/investigation/planner.py` — 4 LLM-assisted planning functions
 - `src/detective/investigation/agent.py` — InvestigationAgent + BudgetTracker

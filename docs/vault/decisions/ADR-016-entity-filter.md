@@ -30,7 +30,7 @@ Without filtering, these noise entities create spurious graph edges that degrade
 
 - `is_junk(entity) -> str | None` — Layer 1 regex-based junk detection (6 pattern types)
 - `is_role_description(entity) -> str | None` — Layer 3 heuristic role detection (6 pattern types)
-- `build_fuzzy_mappings(entities, existing_mappings, threshold=0.75) -> dict` — Layer 2 pre-pass using `difflib.SequenceMatcher`
+- `build_fuzzy_mappings(entities, existing_mappings, threshold=0.75) -> dict` -- Layer 2 pre-pass using `difflib.SequenceMatcher` (now called indirectly via `build_entity_mappings_minhash()` from `src/data/dedup.py` (ADR-026), which delegates to `build_fuzzy_mappings()` for sets < 500 entities)
 - `filter_entities(entities, drop_log=None) -> list[str]` — orchestrator applying Layers 1+3
 
 ### Pipeline integration
@@ -53,7 +53,7 @@ Layer 2 runs as a one-time pre-pass before the main ingestion loop, collecting a
 ## Consequences
 
 - Entity count drops by ~22% (862 of 3,772), with corresponding reduction in spurious graph edges
-- Fuzzy dedup pre-pass adds ~26s to ingestion time (stdlib `difflib`, no new dependencies)
+- Fuzzy dedup pre-pass adds ~26s to ingestion time with the `difflib` path; the MinHash path (ADR-026) may differ in timing depending on set size. `datasketch` is an optional dependency for MinHash/LSH acceleration.
 - The filter is conservative — false positives (dropping real entities) are minimized by narrow regex patterns and explicit role prefix lists
 - Drop log enables post-hoc review: `wc -l` for volume, `jq` queries for category breakdown
 - No changes to the `epstein_adapter.py` normalize/iter_pages interface — filter is additive

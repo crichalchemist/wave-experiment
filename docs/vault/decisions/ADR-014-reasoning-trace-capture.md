@@ -26,11 +26,11 @@ Capturing these traces serves three purposes:
 
 ### Data model
 
-`ReasoningTrace` (frozen dataclass): id, timestamp, module, prompt, raw_response, parsed_score, model, route, duration_ms. Module classification uses heuristic matching of unique phrases in each module's prompt template. Score parsing extracts floats from "score: X" / "confidence: X" patterns.
+`ReasoningTrace` (frozen dataclass): id, timestamp, module, prompt, raw_response, parsed_score, model, route, duration_ms. A `ReasoningTrace.create()` static factory method auto-generates id (UUID), timestamp (UTC ISO), module (via `classify_module()`), and parsed_score (via `try_parse_score()`). Module classification uses heuristic matching of unique phrases in each module's prompt template. Score parsing extracts floats from "score: X" / "confidence: X" patterns.
 
 ### Storage
 
-`TraceStore` — append-only, thread-safe (Lock around file write + deque). JSONL on disk at `DETECTIVE_TRACE_PATH` for durability. Bounded deque (maxlen=500) for fast recent queries. `asyncio.Queue` subscriber list for SSE push.
+`TraceStore` -- append-only, thread-safe (Lock around file write + deque). JSONL on disk at `DETECTIVE_TRACE_PATH` for durability. Bounded deque (maxlen=500) for fast recent queries. `_load_recent_from_disk()` pre-populates the deque from the tail of the JSONL file on startup so `/traces/recent` is not cold after restart. `asyncio.Queue` subscriber list for SSE push.
 
 ### Provider integration
 
@@ -43,7 +43,7 @@ Three new routes in `create_app(trace_store=)`:
 - `GET /traces/history?offset=0&limit=50` — paginated JSONL (newest first)
 - `GET /traces/stream` — SSE with 30s keepalive comments
 
-CORS middleware allows `crichalchemist.com` origins, GET methods only.
+CORS middleware allows `crichalchemist.com` origins with `["GET", "POST"]` methods.
 
 ### Frontend
 

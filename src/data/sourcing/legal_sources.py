@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from src.data.sourcing.types import SourceDocument
+from src.data.sourcing.types import SourceDocument, limit_results
 
 _logger = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ LEGAL_DOMAIN_CONFIGS: dict[str, dict[str, Any]] = {
 
 
 def load_legal_domain_batch(
+    *,
     domain: str,
     max_documents: int = 200,
     split: str = "train",
@@ -106,4 +107,4 @@ def load_legal_domain_batch(
             },
         ))
 
-    return results
+    return limit_results(results, max_documents)
