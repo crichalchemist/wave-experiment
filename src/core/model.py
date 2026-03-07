@@ -3,9 +3,9 @@ DetectiveGPT: multi-task GPT with separate temporal embedding and gap detection 
 
 Architecture:
   token_emb + pos_emb → backbone (TransformerEncoder)
-       ↓                         ↓
-   lm_head              temporal_emb → temporal_encoder → gap_head
-  (language model)                   (gap type classification)
+       ↓                         ↓                              ↓
+   lm_head              temporal_emb → temporal_encoder    assumption_emb → assumption_encoder
+  (language model)       → gap_head (gap classification)    → assumption_head (assumption classification)
 
 The three output tracks are weight-independent. Multi-task loss:
   L_total = L_language + ALPHA * L_gap + BETA * L_assumption
@@ -53,11 +53,12 @@ class _SentinelModule:
 
 class DetectiveGPT(_SentinelModule):
     """
-    Multi-task GPT with independent language model and gap detection tracks.
+    Multi-task GPT with independent language model, gap detection, and assumption detection tracks.
 
-    forward() returns (lm_logits, gap_logits):
-      lm_logits:  (batch, seq_len, vocab_size)
-      gap_logits: (batch, seq_len, N_GAP_TYPES)
+    forward() returns (lm_logits, gap_logits, assumption_logits):
+      lm_logits:        (batch, seq_len, vocab_size)
+      gap_logits:       (batch, seq_len, N_GAP_TYPES)
+      assumption_logits:(batch, seq_len, N_ASSUMPTION_TYPES)
     """
 
     def __init__(
@@ -96,14 +97,19 @@ class DetectiveGPT(_SentinelModule):
         self.temporal_encoder = _n.Linear(n_embd * 2, n_embd)
         self.gap_head = _n.Linear(n_embd, N_GAP_TYPES, bias=False)
 
+        # Track 3: assumption type classification (entirely separate weights)
+        self.assumption_emb = _n.Embedding(MAX_SEQ_LEN, n_embd)
+        self.assumption_encoder = _n.Linear(n_embd * 2, n_embd)
+        self.assumption_head = _n.Linear(n_embd, N_ASSUMPTION_TYPES, bias=False)
+
     def forward(
         self, x: "torch.Tensor"
-    ) -> "tuple[torch.Tensor, torch.Tensor]":
+    ) -> "tuple[torch.Tensor, torch.Tensor, torch.Tensor]":
         """
         Args:
             x: (batch, seq_len) integer token ids
         Returns:
-            (lm_logits, gap_logits)
+            (lm_logits, gap_logits, assumption_logits)
         """
         _t = sys.modules[__name__].torch  # type: ignore[attr-defined]
         batch, seq_len = x.shape
@@ -121,4 +127,11 @@ class DetectiveGPT(_SentinelModule):
         fused = self.temporal_encoder(_t.cat([hidden.detach(), temporal], dim=-1))
         gap_logits = self.gap_head(fused)
 
-        return lm_logits, gap_logits
+        # Track 3: assumption type classification (detach — independent track)
+        assume_pos = self.assumption_emb(positions).expand(batch, -1, -1)
+        assume_fused = self.assumption_encoder(
+            _t.cat([hidden.detach(), assume_pos], dim=-1)
+        )
+        assumption_logits = self.assumption_head(assume_fused)
+
+        return lm_logits, gap_logits, assumption_logits

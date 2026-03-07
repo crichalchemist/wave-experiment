@@ -52,21 +52,28 @@ def _instantiate_gpt_with_mocks():
     return gpt
 
 
-def test_model_has_both_tracks():
-    """Model must expose lm_head, gap_head, temporal_emb, temporal_encoder, backbone."""
+def test_model_has_three_tracks():
+    """Model must expose all three track attributes: LM, gap, assumption."""
     gpt = _instantiate_gpt_with_mocks()
-    for attr in ("lm_head", "gap_head", "temporal_emb", "temporal_encoder", "backbone"):
+    for attr in (
+        "lm_head", "gap_head", "assumption_head",
+        "temporal_emb", "temporal_encoder",
+        "assumption_emb", "assumption_encoder",
+        "backbone",
+    ):
         assert hasattr(gpt, attr), f"Missing attribute: {attr}"
 
 
-def test_lm_head_and_gap_head_are_independent():
-    """lm_head and gap_head must NOT be the same object (no shared weights)."""
+def test_all_three_heads_are_independent():
+    """All three output heads must be distinct objects (no shared weights)."""
     gpt = _instantiate_gpt_with_mocks()
     assert gpt.lm_head is not gpt.gap_head
+    assert gpt.lm_head is not gpt.assumption_head
+    assert gpt.gap_head is not gpt.assumption_head
 
 
-def test_forward_returns_two_tensors():
-    """DetectiveGPT.forward must return a 2-tuple and call both lm_head and gap_head."""
+def test_forward_returns_three_tensors():
+    """DetectiveGPT.forward must return a 3-tuple and call all three heads."""
     from importlib import reload
     import src.core.model as model_module
 
@@ -92,12 +99,12 @@ def test_forward_returns_two_tensors():
 
         result = gpt.forward(mock_x)  # called inside patch context
 
-    # The real DetectiveGPT.forward must return a 2-tuple
     assert isinstance(result, tuple), "forward() must return a tuple"
-    assert len(result) == 2, "forward() must return exactly 2 elements (lm_logits, gap_logits)"
-    # Both heads must have been invoked
+    assert len(result) == 3, "forward() must return exactly 3 elements (lm, gap, assumption)"
+    # All three heads must have been invoked
     gpt.lm_head.assert_called_once()
     gpt.gap_head.assert_called_once()
+    gpt.assumption_head.assert_called_once()
 
 
 def test_gap_logits_last_dim_matches_n_gap_types():
@@ -111,3 +118,9 @@ def test_token_emb_and_temporal_emb_are_independent():
     """token_emb and temporal_emb must be separate Embedding instances."""
     gpt = _instantiate_gpt_with_mocks()
     assert gpt.token_emb is not gpt.temporal_emb
+
+
+def test_assumption_emb_and_temporal_emb_are_independent():
+    """assumption_emb and temporal_emb must be separate Embedding instances."""
+    gpt = _instantiate_gpt_with_mocks()
+    assert gpt.temporal_emb is not gpt.assumption_emb
