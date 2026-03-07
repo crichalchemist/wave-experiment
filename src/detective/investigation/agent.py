@@ -385,6 +385,22 @@ class InvestigationAgent:
                     )
                 )
 
+        # Deduplicate gathered documents
+        if len(all_docs) > 1:
+            from src.data.dedup import DedupIndex
+
+            dedup_idx = DedupIndex(threshold=0.5)
+            unique_docs: list[DocumentEvidence] = []
+            for doc in all_docs:
+                if not dedup_idx.is_duplicate(doc.text):
+                    unique_docs.append(doc)
+                    dedup_idx.add(doc.source_url or doc.title, doc.text)
+            if len(unique_docs) < len(all_docs):
+                _logger.info(
+                    "Dedup: %d → %d documents", len(all_docs), len(unique_docs)
+                )
+            all_docs = unique_docs
+
         return all_docs, total_pages, injection_findings, 0
 
     def _analyze_phase(

@@ -44,6 +44,9 @@ scraping = [
 ner = [
     "spacy>=3.7.0",
 ]
+dedup = [
+    "datasketch>=1.6.0",
+]
 
 [project.scripts]
 detective = "src.cli.main:cli"

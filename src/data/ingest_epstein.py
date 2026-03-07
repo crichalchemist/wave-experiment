@@ -15,7 +15,8 @@ from itertools import combinations
 from pathlib import Path
 
 from src.core.types import RelationType
-from src.data.entity_filter import DropLog, build_fuzzy_mappings, filter_entities
+from src.data.dedup import build_entity_mappings_minhash
+from src.data.entity_filter import DropLog, filter_entities
 from src.data.epstein_adapter import (
     EpsteinAnalysis,
     iter_pages,
@@ -87,7 +88,7 @@ def ingest_epstein(
     for page in iter_pages(root, mappings):
         raw_entities.extend(page.people)
     unique_raw = list(set(raw_entities))
-    fuzzy_new = build_fuzzy_mappings(unique_raw, people_map)
+    fuzzy_new = build_entity_mappings_minhash(unique_raw, people_map)
     people_map.update(fuzzy_new)
     fuzzy_mappings_added = len(fuzzy_new)
     if fuzzy_new:
