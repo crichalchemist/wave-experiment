@@ -42,6 +42,7 @@ from src.detective.investigation.types import (
     InvestigationReport,
     InvestigationStep,
     Lead,
+    PersonAuditSummary,
     SourceResult,
     TerminationReason,
 )
@@ -860,6 +861,69 @@ class InvestigationAgent:
         )
         self._steps.append(step)
 
+    def _audit_phase(self) -> tuple[PersonAuditSummary, ...]:
+        """Optional post-processing: audit top entities from findings.
+
+        Budget-aware: only audits when budget allows, limits to top 5 entities.
+        """
+        _MAX_AUDIT_ENTITIES: int = 5
+
+        if not self._findings:
+            return ()
+
+        # Collect entity mentions from findings
+        from collections import Counter
+        entity_counts: Counter[str] = Counter()
+        for finding in self._findings:
+            if finding.is_injection_finding:
+                continue
+            # Extract capitalized names from finding descriptions
+            from src.data.ner import extract_entities
+            ner = extract_entities(finding.description)
+            for ent in ner.entities:
+                if ent.label in ("PERSON", "ORG"):
+                    entity_counts[ent.text] += 1
+
+        if not entity_counts:
+            return ()
+
+        top_entities = [name for name, _ in entity_counts.most_common(_MAX_AUDIT_ENTITIES)]
+
+        # Build evidence texts from gathered documents
+        evidence_texts = [
+            f.description for f in self._findings if not f.is_injection_finding
+        ]
+
+        summaries: list[PersonAuditSummary] = []
+        from src.detective.person_auditor import audit_person
+        for entity in top_entities:
+            # Gather finding texts mentioning this entity
+            finding_texts = [
+                f.description for f in self._findings
+                if entity.lower() in f.description.lower()
+                and not f.is_injection_finding
+            ]
+            if not finding_texts:
+                continue
+
+            audit = audit_person(
+                person=entity,
+                finding_texts=finding_texts,
+                evidence_texts=evidence_texts,
+                provider=self._provider,
+            )
+            summaries.append(PersonAuditSummary(
+                person=audit.person,
+                claim_count=len(audit.claims),
+                supported_count=audit.supported_count,
+                contradicted_count=audit.contradicted_count,
+                unverified_count=audit.unverified_count,
+                severity_score=audit.severity_score,
+                overall_confidence=audit.overall_confidence,
+            ))
+
+        return tuple(summaries)
+
     def _build_report(self, reason: TerminationReason) -> InvestigationReport:
         """Assemble the final investigation report."""
         weights = WEIGHTS_BRIDGE if self._config.phi_metrics else WEIGHTS_DEFAULT
@@ -877,6 +941,9 @@ class InvestigationAgent:
             for h in self._hypotheses
         )
 
+        # Run optional person audit
+        person_audits = self._audit_phase()
+
         return InvestigationReport(
             config=self._config,
             findings=tuple(self._findings),
@@ -889,6 +956,7 @@ class InvestigationAgent:
             termination_reason=reason,
             graph_edges_added=self._graph_edges_added,
             total_assumptions_detected=self._total_assumptions,
+            person_audits=person_audits,
         )
 
     @property

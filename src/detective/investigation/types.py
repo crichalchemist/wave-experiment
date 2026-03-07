@@ -273,6 +273,19 @@ class HypothesisSnapshot:
 
 
 @dataclass(frozen=True)
+class PersonAuditSummary:
+    """Summary of a person audit for inclusion in investigation reports."""
+
+    person: str
+    claim_count: int
+    supported_count: int
+    contradicted_count: int
+    unverified_count: int
+    severity_score: float
+    overall_confidence: float
+
+
+@dataclass(frozen=True)
 class InvestigationReport:
     """Final report produced by an investigation run."""
 
@@ -287,3 +300,4 @@ class InvestigationReport:
     termination_reason: TerminationReason
     graph_edges_added: int = 0
     total_assumptions_detected: int = 0
+    person_audits: tuple[PersonAuditSummary, ...] = ()

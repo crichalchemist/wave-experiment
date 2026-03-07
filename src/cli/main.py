@@ -487,6 +487,65 @@ def investigate_cmd(
         click.echo(f"\nReport saved to {output}")
 
 
+@cli.command("audit-person")
+@click.option("--name", "-n", required=True, help="Person name to audit.")
+@click.option("--data-dir", "-d", type=click.Path(exists=True, path_type=Path),
+              default=None, help="Directory with finding text files to audit.")
+@click.option("--findings", "-f", multiple=True,
+              help="Finding text(s) to audit (can be repeated).")
+@click.option("--evidence", "-e", multiple=True,
+              help="Evidence text(s) to verify against (can be repeated).")
+def audit_person_cmd(name: str, data_dir: Path | None, findings: tuple[str, ...], evidence: tuple[str, ...]) -> None:
+    """Audit a person's claims: decompose, verify, and score severity."""
+    import json
+    from src.detective.person_auditor import audit_person
+
+    finding_texts = list(findings)
+    evidence_texts = list(evidence)
+
+    # Load from data directory if provided
+    if data_dir:
+        for txt_file in sorted(data_dir.glob("**/*.txt")):
+            finding_texts.append(txt_file.read_text(encoding="utf-8", errors="replace"))
+
+    if not finding_texts:
+        click.echo("No findings provided. Use --findings or --data-dir.", err=True)
+        return
+
+    # Try to get a provider for LLM-assisted auditing
+    provider = None
+    try:
+        provider = provider_from_env()
+    except Exception:
+        click.echo("No LLM provider configured — using heuristic fallback.")
+
+    click.echo(f"Auditing: {name}")
+    click.echo(f"  Findings: {len(finding_texts)}")
+    click.echo(f"  Evidence: {len(evidence_texts)}")
+
+    result = audit_person(
+        person=name,
+        finding_texts=finding_texts,
+        evidence_texts=evidence_texts,
+        provider=provider,
+    )
+
+    click.echo(f"\nResults for {result.person}:")
+    click.echo(f"  Claims decomposed:  {len(result.claims)}")
+    click.echo(f"  Supported:          {result.supported_count}")
+    click.echo(f"  Contradicted:       {result.contradicted_count}")
+    click.echo(f"  Unverified:         {result.unverified_count}")
+    click.echo(f"  Overall confidence: {result.overall_confidence:.2f}")
+    click.echo(f"  Severity score:     {result.severity_score:.2f}")
+
+    if result.claims:
+        click.echo(f"\nClaims:")
+        for i, claim in enumerate(result.claims, 1):
+            v = result.verifications[i - 1] if i <= len(result.verifications) else None
+            status = v.status if v else "?"
+            click.echo(f"  {i}. [{claim.claim_type}] {claim.text} → {status}")
+
+
 def _serialize_datetimes(obj: dict | list) -> None:
     """Recursively convert datetime objects to ISO strings in a dict/list."""
     if isinstance(obj, dict):
