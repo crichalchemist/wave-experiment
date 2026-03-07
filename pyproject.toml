@@ -41,6 +41,9 @@ scraping = [
     "pdf2image>=1.16.0",
     "pytesseract>=0.3.10",
 ]
+ner = [
+    "spacy>=3.7.0",
+]
 
 [project.scripts]
 detective = "src.cli.main:cli"

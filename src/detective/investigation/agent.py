@@ -579,18 +579,16 @@ class InvestigationAgent:
     def _enrich_phase(self, docs: list[DocumentEvidence]) -> int:
         """Extract entities from documents and add edges to graph."""
         from src.core.types import RelationType
+        from src.data.ner import extract_entities
 
         edges_added = 0
         all_entities: list[str] = []
 
         for doc in docs:
-            # Simple entity extraction: split on common delimiters, filter
-            words = doc.text.split()
-            candidates = [
-                w for w in words
-                if len(w) > 2 and w[0].isupper() and w.isalpha()
-            ]
-            all_entities.extend(candidates)
+            ner_result = extract_entities(doc.text)
+            for ent in ner_result.entities:
+                if ent.label in ("PERSON", "ORG"):
+                    all_entities.append(ent.text)
 
         # Filter through entity filter
         clean_entities = filter_entities(all_entities)
