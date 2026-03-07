@@ -4,9 +4,11 @@ from unittest.mock import MagicMock, patch
 
 
 def test_model_constants():
-    from src.core.model import N_GAP_TYPES, ALPHA, DEFAULT_N_EMBD, MAX_SEQ_LEN
+    from src.core.model import N_GAP_TYPES, N_ASSUMPTION_TYPES, ALPHA, BETA, DEFAULT_N_EMBD, MAX_SEQ_LEN
     assert N_GAP_TYPES == 5
+    assert N_ASSUMPTION_TYPES == 3
     assert ALPHA == 0.3
+    assert BETA == 0.3
     assert DEFAULT_N_EMBD == 384
     assert MAX_SEQ_LEN == 1024
 
