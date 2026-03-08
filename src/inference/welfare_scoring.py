@@ -7,6 +7,7 @@ welfare relevance via Phi gradients.
 Uses semantic classifier (DistilBERT) as primary method with keyword
 fallback when the model is not yet trained.
 """
+
 from typing import Dict, Optional, Tuple
 import logging
 import math
@@ -19,61 +20,163 @@ _logger = logging.getLogger(__name__)
 # Based on humanity.md definitions and constitution.md usage
 # ---------------------------------------------------------------------------
 
-_CARE_PATTERNS = frozenset({
-    "resource", "allocation", "funding", "provision", "basic needs",
-    "poverty", "deprivation", "access", "material", "sustenance",
-    "shelter", "food", "water", "healthcare", "education"
-})
+_CARE_PATTERNS = frozenset(
+    {
+        "resource",
+        "allocation",
+        "funding",
+        "provision",
+        "basic needs",
+        "poverty",
+        "deprivation",
+        "access",
+        "material",
+        "sustenance",
+        "shelter",
+        "food",
+        "water",
+        "healthcare",
+        "education",
+    }
+)
 
-_COMPASSION_PATTERNS = frozenset({
-    "distress", "suffering", "crisis", "emergency", "relief",
-    "support", "assistance", "response", "aid"
-})
+_COMPASSION_PATTERNS = frozenset(
+    {
+        "distress",
+        "suffering",
+        "crisis",
+        "emergency",
+        "relief",
+        "support",
+        "assistance",
+        "response",
+        "aid",
+    }
+)
 
-_JOY_PATTERNS = frozenset({
-    "wellbeing", "happiness", "positive affect", "quality of life",
-    "flourishing", "life satisfaction"
-})
+_JOY_PATTERNS = frozenset(
+    {
+        "wellbeing",
+        "happiness",
+        "positive affect",
+        "quality of life",
+        "flourishing",
+        "life satisfaction",
+    }
+)
 
-_PURPOSE_PATTERNS = frozenset({
-    "autonomy", "agency", "self-determination", "goals", "meaning",
-    "purpose", "fulfillment", "chosen", "voluntary"
-})
+_PURPOSE_PATTERNS = frozenset(
+    {
+        "autonomy",
+        "agency",
+        "self-determination",
+        "goals",
+        "meaning",
+        "purpose",
+        "fulfillment",
+        "chosen",
+        "voluntary",
+    }
+)
 
-_EMPATHY_PATTERNS = frozenset({
-    "perspective", "understanding", "intergroup", "discrimination",
-    "bias", "prejudice", "othering", "dehumanization", "stereotyping",
-    "outgroup", "marginalized", "excluded"
-})
+_EMPATHY_PATTERNS = frozenset(
+    {
+        "perspective",
+        "understanding",
+        "intergroup",
+        "discrimination",
+        "bias",
+        "prejudice",
+        "othering",
+        "dehumanization",
+        "stereotyping",
+        "outgroup",
+        "marginalized",
+        "excluded",
+    }
+)
 
-_LOVE_PATTERNS = frozenset({
-    "growth", "mutual aid", "nurture", "solidarity", "community",
-    "capacity", "bonding", "collective", "cooperative", "fellowship",
-    "kinship", "togetherness", "belonging"
-})
+_LOVE_PATTERNS = frozenset(
+    {
+        "growth",
+        "mutual aid",
+        "nurture",
+        "solidarity",
+        "community",
+        "capacity",
+        "bonding",
+        "collective",
+        "cooperative",
+        "fellowship",
+        "kinship",
+        "togetherness",
+        "belonging",
+    }
+)
 
-_PROTECTION_PATTERNS = frozenset({
-    "safeguard", "protect", "safety", "security", "violence", "harm",
-    "abuse", "exploitation", "vulnerability", "risk", "threat",
-    "danger", "integrity", "dignity", "rights"
-})
+_PROTECTION_PATTERNS = frozenset(
+    {
+        "safeguard",
+        "protect",
+        "safety",
+        "security",
+        "violence",
+        "harm",
+        "abuse",
+        "exploitation",
+        "vulnerability",
+        "risk",
+        "threat",
+        "danger",
+        "integrity",
+        "dignity",
+        "rights",
+    }
+)
 
-_TRUTH_PATTERNS = frozenset({
-    "suppress", "conceal", "redact", "withhold", "falsify", "fabricate",
-    "misinform", "disinform", "contradiction", "inconsistency",
-    "omission", "cover-up", "distortion", "manipulation"
-})
+_TRUTH_PATTERNS = frozenset(
+    {
+        "suppress",
+        "conceal",
+        "redact",
+        "withhold",
+        "falsify",
+        "fabricate",
+        "misinform",
+        "disinform",
+        "contradiction",
+        "inconsistency",
+        "omission",
+        "cover-up",
+        "distortion",
+        "manipulation",
+    }
+)
 
 # Curiosity patterns: the investigative drive where love meets truth.
 # hooks (2000): love is "the will to extend one's self for growth."
 # Curiosity is that extension directed at understanding.
 # These patterns fire BOTH lam_L and xi, because curiosity lives at their intersection.
-_CURIOSITY_PATTERNS = frozenset({
-    "inquiry", "investigate", "investigating", "hunch", "curiosity",
-    "scrutiny", "discrepancy", "unanswered", "unexplained", "dig deeper",
-    "follow the trail", "look closer", "something doesn't add up",
-    "warrants further", "worth investigating", "pull on this thread",
-})
+_CURIOSITY_PATTERNS = frozenset(
+    {
+        "inquiry",
+        "investigate",
+        "investigating",
+        "hunch",
+        "curiosity",
+        "scrutiny",
+        "discrepancy",
+        "unanswered",
+        "unexplained",
+        "dig deeper",
+        "follow the trail",
+        "look closer",
+        "something doesn't add up",
+        "warrants further",
+        "worth investigating",
+        "pull on this thread",
+    }
+)
 
 # Map patterns to Phi construct names (matching humanity.md symbols)
 # 8 constructs: split former "lam" into "lam_L" (love) and "lam_P" (protection)
@@ -93,12 +196,12 @@ _CONSTRUCT_PATTERNS = {
 # Hard floors per construct (design doc §2)
 # ---------------------------------------------------------------------------
 CONSTRUCT_FLOORS: Dict[str, float] = {
-    "c": 0.20,       # Basic needs non-negotiable
-    "kappa": 0.20,    # Crisis response minimum
-    "lam_P": 0.20,    # Safety non-negotiable
-    "lam_L": 0.15,    # Community minimum
-    "xi": 0.30,       # Epistemic integrity highest floor
-    "j": 0.10,        # Lower but present
+    "c": 0.20,  # Basic needs non-negotiable
+    "kappa": 0.20,  # Crisis response minimum
+    "lam_P": 0.20,  # Safety non-negotiable
+    "lam_L": 0.15,  # Community minimum
+    "xi": 0.30,  # Epistemic integrity highest floor
+    "j": 0.10,  # Lower but present
     "p": 0.10,
     "eps": 0.10,
 }
@@ -108,18 +211,21 @@ CONSTRUCT_FLOORS: Dict[str, float] = {
 # ---------------------------------------------------------------------------
 
 # Recovery-aware sigmoid parameters (recovery_aware_input)
-_SIGMOID_STEEPNESS: float = 10.0   # How sharply sigmoid responds to trajectory change
-_SIGMOID_BIAS: float = -3.0        # Shift so dx_dt=0 maps to ~0.047 (not 0.5)
-_COMMUNITY_GUARD: float = 0.01     # Guard against lam_L=0 in community_capacity
+_SIGMOID_STEEPNESS: float = 10.0  # How sharply sigmoid responds to trajectory change
+_SIGMOID_BIAS: float = -3.0  # Shift so dx_dt=0 maps to ~0.047 (not 0.5)
+_COMMUNITY_GUARD: float = 0.01  # Guard against lam_L=0 in community_capacity
 
 # Equity weight defaults
-_EQUITY_GUARD: float = 0.01        # Guard against division by zero
-_EQUITY_DEFAULT: float = 0.5       # Default construct level when absent from metrics
+_EQUITY_GUARD: float = 0.01  # Guard against division by zero
+_EQUITY_DEFAULT: float = 0.5  # Default construct level when absent from metrics
 
 # Normalization offsets (soft saturation: score = x / (x + k))
-_WELFARE_NORM_K: float = 1.0       # score -> 0.5 when gradient_sum = 1.0
-_CURIOSITY_NORM_K: float = 1.0     # same semantics for curiosity
+_WELFARE_NORM_K: float = 1.0  # score -> 0.5 when gradient_sum = 1.0
+_CURIOSITY_NORM_K: float = 1.0  # same semantics for curiosity
 _TRAJECTORY_URGENCY_K: float = 0.02  # decline of 0.02/step -> urgency ~0.5
+
+# Numerical gradient (central difference for true ∂Φ/∂xᵢ)
+_GRADIENT_EPSILON: float = 1e-5  # Step size for (Φ(x+ε) - Φ(x-ε)) / 2ε
 
 # Forecast noise
 _FORECAST_NOISE_SCALE: float = 0.001  # Tiny noise for signal processing stability
@@ -198,16 +304,16 @@ def community_multiplier(lam_L: float) -> float:
     return max(0.01, lam_L) ** GAMMA
 
 
-ETA = 0.10   # Ubuntu synergy coupling strength
-MU = 0.15    # Divergence penalty coefficient
+ETA = 0.10  # Ubuntu synergy coupling strength
+MU = 0.15  # Divergence penalty coefficient
 ETA_CURIOSITY = 0.08  # Cross-pair curiosity coupling (love x truth)
 
 # Paired constructs: (a, b) — welfare gains emerge from relationships
 CONSTRUCT_PAIRS = [
-    ("c", "lam_L"),      # Care x Love: material provision + developmental extension
-    ("kappa", "lam_P"),   # Compassion x Protection: emergency response + safeguarding
-    ("j", "p"),           # Joy x Purpose: positive affect + goal-alignment
-    ("eps", "xi"),        # Empathy x Truth: perspective-taking + epistemic integrity
+    ("c", "lam_L"),  # Care x Love: material provision + developmental extension
+    ("kappa", "lam_P"),  # Compassion x Protection: emergency response + safeguarding
+    ("j", "p"),  # Joy x Purpose: positive affect + goal-alignment
+    ("eps", "xi"),  # Empathy x Truth: perspective-taking + epistemic integrity
 ]
 
 # Cross-pair coupling: love x truth = curiosity (investigative drive)
@@ -259,8 +365,7 @@ def divergence_penalty(metrics: Dict[str, float]) -> float:
       - truth-without-love (surveillance) / love-without-truth (willful ignorance)
     """
     sq_sum = sum(
-        (metrics.get(a, 0.5) - metrics.get(b, 0.5)) ** 2
-        for a, b in PENALTY_PAIRS
+        (metrics.get(a, 0.5) - metrics.get(b, 0.5)) ** 2 for a, b in PENALTY_PAIRS
     )
     return MU * sq_sum / len(PENALTY_PAIRS)
 
@@ -268,6 +373,7 @@ def divergence_penalty(metrics: Dict[str, float]) -> float:
 def compute_phi(
     metrics: Dict[str, float],
     derivatives: Optional[Dict[str, float]] = None,
+    lam_L_prev: Optional[float] = None,
 ) -> float:
     """
     Compute Phi(humanity) — the full welfare function (v2.1).
@@ -281,6 +387,12 @@ def compute_phi(
     Args:
         metrics: Dict mapping each construct symbol to a value in [0, 1].
         derivatives: Optional dict of dx/dt per construct. Defaults to 0.0.
+        lam_L_prev: Previous timestep's λ_L value, used to break the circular
+            dependency in λ_L's own recovery calculation. When λ_L is below its
+            floor, its recovery depends on community_capacity = lam_L^0.5.
+            Using the current λ_L creates self-reference; lam_L_prev resolves
+            this by using yesterday's solidarity to compute today's recovery.
+            When None, falls back to raw lam_L (backward-compatible).
     """
     if derivatives is None:
         derivatives = {}
@@ -288,13 +400,19 @@ def compute_phi(
     lam_L_raw = max(_EQUITY_GUARD, metrics.get("lam_L", _EQUITY_DEFAULT))
     f_lam = community_multiplier(lam_L_raw)
 
+    # For λ_L's own recovery, use lagged value to break circularity.
+    # All other constructs use current lam_L_raw as community capacity.
+    lam_L_for_own_recovery = lam_L_prev if lam_L_prev is not None else lam_L_raw
+
     # Recovery-aware effective values
     effective: Dict[str, float] = {}
     for c in ALL_CONSTRUCTS:
         x_raw = max(_EQUITY_GUARD, metrics.get(c, _EQUITY_DEFAULT))
         floor_c = CONSTRUCT_FLOORS[c]
         dx_dt_c = derivatives.get(c, 0.0)
-        effective[c] = recovery_aware_input(x_raw, floor_c, dx_dt_c, lam_L_raw)
+        # λ_L uses lagged community capacity to avoid self-referential recovery
+        community = lam_L_for_own_recovery if c == "lam_L" else lam_L_raw
+        effective[c] = recovery_aware_input(x_raw, floor_c, dx_dt_c, community)
 
     # Equity weights on effective values
     weights = equity_weights(effective)
@@ -333,6 +451,7 @@ def get_construct_scores(text: str) -> Dict[str, float]:
     """Get welfare construct scores — delegates to semantic classifier with keyword fallback."""
     try:
         from src.inference.welfare_classifier import get_construct_scores as _semantic
+
         scores = _semantic(text)
         if any(score > 0.0 for score in scores.values()):
             return scores
@@ -350,6 +469,7 @@ def infer_threatened_constructs(text: str) -> Tuple[str, ...]:
     """Infer which Phi constructs a hypothesis/gap threatens."""
     try:
         from src.inference.welfare_classifier import get_construct_scores as _semantic
+
         scores = _semantic(text)
         if any(score > 0.0 for score in scores.values()):
             return tuple(sorted(c for c, s in scores.items() if s >= 0.3))
@@ -361,17 +481,15 @@ def infer_threatened_constructs(text: str) -> Tuple[str, ...]:
 
 def phi_gradient_wrt(construct: str, metrics: Dict[str, float]) -> float:
     """
-    Compute dPhi/dx for construct x, given current metric levels.
+    Compute ∂Φ/∂xᵢ for construct xᵢ via central finite differences.
 
-    Equity-weighted, community-mediated gradient:
-        dPhi/dx ~ solidarity * w_i / x
+    Uses numerical differentiation: (Φ(x+ε) - Φ(x-ε)) / 2ε
 
-    Where:
-        - solidarity = lam_L^0.5 (community multiplier)
-        - w_i = (1/x_i) / sum(1/x_j) (equity-adjusted weight)
-        - x = clamped construct value
+    This captures all effects the analytical approximation missed:
+    synergy coupling, divergence penalties, recovery floors, equity
+    weight redistribution, and community multiplier interactions.
 
-    Low values -> high weights -> high gradients -> high priority.
+    Low values -> high gradients -> high priority.
     Low community -> low solidarity -> all gradients reduced.
 
     Args:
@@ -380,14 +498,27 @@ def phi_gradient_wrt(construct: str, metrics: Dict[str, float]) -> float:
         metrics: Current Phi metric levels, each in [0, 1]
 
     Returns:
-        Gradient value (unbounded, but typically in [0.1, 100] range)
+        Gradient value (non-negative; typically in [0.01, 50] range)
     """
-    x = max(0.01, min(1.0, metrics.get(construct, 0.5)))
-    weights = equity_weights(metrics)
-    w_i = weights.get(construct, 1.0 / 8.0)
-    solidarity = community_multiplier(metrics.get("lam_L", 0.5))
+    x = max(_EQUITY_GUARD, min(1.0, metrics.get(construct, _EQUITY_DEFAULT)))
+    eps = _GRADIENT_EPSILON
 
-    return solidarity * w_i / x
+    # Central difference: f(x+ε) and f(x-ε)
+    metrics_plus = dict(metrics)
+    metrics_plus[construct] = min(1.0, x + eps)
+
+    metrics_minus = dict(metrics)
+    metrics_minus[construct] = max(_EQUITY_GUARD, x - eps)
+
+    phi_plus = compute_phi(metrics_plus)
+    phi_minus = compute_phi(metrics_minus)
+
+    actual_delta = metrics_plus[construct] - metrics_minus[construct]
+    if actual_delta < 1e-12:
+        return 0.0
+
+    gradient = (phi_plus - phi_minus) / actual_delta
+    return max(0.0, gradient)  # Φ is monotonically non-decreasing in each construct
 
 
 def score_hypothesis_welfare(
@@ -427,8 +558,7 @@ def score_hypothesis_welfare(
         return 0.0  # No welfare threat detected
 
     gradient_sum = sum(
-        phi_gradient_wrt(construct, phi_metrics)
-        for construct in constructs
+        phi_gradient_wrt(construct, phi_metrics) for construct in constructs
     )
 
     # Normalize to [0, 1] using soft saturation
@@ -516,8 +646,7 @@ def compute_gap_urgency(gap: "Gap", phi_metrics: Dict[str, float]) -> float:  # 
         return 0.0
 
     gradient_sum = sum(
-        phi_gradient_wrt(construct, phi_metrics)
-        for construct in constructs
+        phi_gradient_wrt(construct, phi_metrics) for construct in constructs
     )
 
     return gradient_sum * gap.confidence
@@ -539,6 +668,7 @@ def _get_forecaster():
     with _forecaster_lock:
         if _forecaster_cache is None:
             from src.forecasting.phi_trajectory import PhiTrajectoryForecaster
+
             _forecaster_cache = PhiTrajectoryForecaster()
     return _forecaster_cache
 
@@ -565,21 +695,22 @@ def _forecast_from_metrics(
     data = {}
     for c in ALL_CONSTRUCTS:
         level = max(0.01, min(1.0, metrics.get(c, 0.5)))
-        data[c] = np.full(history_len, level) + rng.normal(0, _FORECAST_NOISE_SCALE, history_len)
+        data[c] = np.full(history_len, level) + rng.normal(
+            0, _FORECAST_NOISE_SCALE, history_len
+        )
         data[c] = np.clip(data[c], 0.0, 1.0)
 
     df = pd.DataFrame(data)
 
     # Compute Phi column (use local compute_phi — does NOT take derivatives)
-    phi_vals = np.array([
-        compute_phi({c: df.at[i, c] for c in ALL_CONSTRUCTS})
-        for i in range(len(df))
-    ])
+    phi_vals = np.array(
+        [compute_phi({c: df.at[i, c] for c in ALL_CONSTRUCTS}) for i in range(len(df))]
+    )
     df["phi"] = phi_vals
 
     # Feature engineering via pipeline
     X = forecaster.pipeline.fit_transform(df)
-    X_seq = X[np.newaxis, -forecaster.pipeline.seq_len:]  # [1, seq_len, 36]
+    X_seq = X[np.newaxis, -forecaster.pipeline.seq_len :]  # [1, seq_len, 36]
     X_tensor = torch.tensor(X_seq, dtype=torch.float32)
 
     # Predict
