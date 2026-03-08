@@ -1,4 +1,5 @@
 """Configuration for multi-task training of DetectiveGPT."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

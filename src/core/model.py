@@ -10,6 +10,7 @@ Architecture:
 The three output tracks are weight-independent. Multi-task loss:
   L_total = L_language + ALPHA * L_gap + BETA * L_assumption
 """
+
 from __future__ import annotations
 
 import sys
@@ -31,7 +32,9 @@ except ImportError:
 
 # Named constants
 N_GAP_TYPES: int = 5  # temporal, evidential, contradiction, normative, doctrinal
-N_ASSUMPTION_TYPES: int = 3  # cognitive_bias, historical_determinism, geopolitical_presumption
+N_ASSUMPTION_TYPES: int = (
+    3  # cognitive_bias, historical_determinism, geopolitical_presumption
+)
 ALPHA: float = 0.3  # gap loss weight in multi-task objective
 BETA: float = 0.3  # assumption loss weight in multi-task objective
 DEFAULT_N_LAYER: int = 6

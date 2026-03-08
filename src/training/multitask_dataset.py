@@ -3,6 +3,7 @@
 Provides JSONL annotation loading, character-level tokenization (BOS convention
 from microgpt.py), and label-index mappings for gap and assumption types.
 """
+
 from __future__ import annotations
 
 import json

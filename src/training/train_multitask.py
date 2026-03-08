@@ -9,11 +9,12 @@ Usage:
     trainer = build_multitask_trainer(model, train_data=samples)
     results = trainer.train()
 """
+
 from __future__ import annotations
 
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 try:
@@ -145,9 +146,7 @@ class MultitaskTrainer:
         _t = sys.modules[__name__].torch  # type: ignore[attr-defined]
         char_to_id, bos_id = self._build_char_vocab()
 
-        optimizer = _t.optim.Adam(
-            self.model.parameters(), lr=self.config.learning_rate
-        )
+        optimizer = _t.optim.Adam(self.model.parameters(), lr=self.config.learning_rate)
 
         global_step = 0
         batch_size = self.config.batch_size

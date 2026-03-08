@@ -2,6 +2,7 @@
 
 L_total = L_language + alpha * L_gap + beta * L_assumption
 """
+
 from __future__ import annotations
 
 import sys

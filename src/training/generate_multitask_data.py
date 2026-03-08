@@ -3,6 +3,7 @@
 Produces JSONL samples with gap_type and assumption_type labels
 using regex triggers from Module A/B/C patterns plus template sentences.
 """
+
 from __future__ import annotations
 
 import json
@@ -46,7 +47,9 @@ _GAP_TEMPORAL_PATTERNS: list[re.Pattern[str]] = [
 _GAP_EVIDENTIAL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\bno\s+(?:documentation|evidence|proof|record)\b", re.IGNORECASE),
     re.compile(r"\bunsupported\s+claim\b", re.IGNORECASE),
-    re.compile(r"\bwithout\s+(?:documentation|evidence|corroboration)\b", re.IGNORECASE),
+    re.compile(
+        r"\bwithout\s+(?:documentation|evidence|corroboration)\b", re.IGNORECASE
+    ),
     re.compile(r"\bclaim(?:s|ed)?\s+without\b", re.IGNORECASE),
 ]
 
