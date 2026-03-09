@@ -52,7 +52,7 @@ dedup = [
 detective = "src.cli.main:cli"
 
 [tool.pytest.ini_options]
-pythonpath = [".", "Dignity-Model"]
+pythonpath = ["."]
 
 [tool.setuptools.packages.find]
 where = ["."]

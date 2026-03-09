@@ -1,9 +1,8 @@
 """
 Phi signal processor — 34+ feature construct signal extraction.
 
-Extends Dignity-Model's SignalProcessor with welfare-specific signals:
-volatility, momentum, synergy, divergence, and Phi trajectory for all
-8 Phi(humanity) constructs.
+Computes welfare-specific signals: volatility, momentum, synergy,
+divergence, and Phi trajectory for all 8 Phi(humanity) constructs.
 
 Feature layout (34+ columns):
     8 raw constructs
@@ -15,40 +14,82 @@ Feature layout (34+ columns):
     1 dphi_dt (rate of change of Phi)
 """
 
-import importlib.util
-import os
-
 import numpy as np
 import pandas as pd
 
-# Import Dignity-Model's SignalProcessor by absolute path to avoid
-# namespace collision with wave-experiment's own tests/core/ package.
-_signals_path = os.path.join(
-    os.path.dirname(__file__), "..", "..", "Dignity-Model", "core", "signals.py"
-)
-_signals_path = os.path.abspath(_signals_path)
-_spec = importlib.util.spec_from_file_location("dignity_core_signals", _signals_path)
-_dignity_signals_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_dignity_signals_mod)
-_DignitySignals = _dignity_signals_mod.SignalProcessor
 from src.inference.welfare_scoring import (
     ALL_CONSTRUCTS,
-    CONSTRUCT_PAIRS,
-    CURIOSITY_CROSS_PAIR,
     PENALTY_PAIRS,
     compute_phi,
 )
 
 
-class PhiSignalProcessor(_DignitySignals):
+class PhiSignalProcessor:
     """
     Welfare-aware signal processor for Phi construct time-series.
 
-    Inherits Dignity's volatility, momentum, directional_change, regime,
-    synergy_signal, divergence_signal, and phi_derivative.  Adds
-    ``compute_all_signals`` which produces a 34+ column feature DataFrame
-    from raw 8-construct input.
+    Provides volatility, momentum, synergy_signal, divergence_signal,
+    and phi_derivative as static methods, plus ``compute_all_signals``
+    which produces a 34+ column feature DataFrame from raw 8-construct
+    input.
     """
+
+    @staticmethod
+    def volatility(values: np.ndarray, window: int = 20) -> np.ndarray:
+        """Calculate rolling volatility (standard deviation)."""
+        if len(values) < window:
+            return np.zeros_like(values)
+
+        result = np.zeros_like(values)
+        for i in range(window, len(values)):
+            result[i] = np.std(values[i - window : i])
+
+        # Fill initial values with first valid volatility
+        if window < len(values):
+            result[:window] = result[window]
+
+        return result
+
+    @staticmethod
+    def price_momentum(prices: np.ndarray, window: int = 10) -> np.ndarray:
+        """Calculate price momentum (rate of change)."""
+        if len(prices) < window:
+            return np.zeros_like(prices)
+
+        result = np.zeros_like(prices)
+        for i in range(window, len(prices)):
+            result[i] = (prices[i] - prices[i - window]) / prices[i - window]
+
+        return result
+
+    @staticmethod
+    def synergy_signal(a: np.ndarray, b: np.ndarray, window: int = 20) -> np.ndarray:
+        """Rolling geometric mean synergy between two construct time-series."""
+        geo = np.sqrt(np.maximum(0, a) * np.maximum(0, b))
+        if len(geo) < window:
+            return geo
+        result = np.zeros_like(geo)
+        for i in range(window, len(geo)):
+            result[i] = np.mean(geo[i - window : i])
+        result[:window] = result[window] if window < len(geo) else 0
+        return result
+
+    @staticmethod
+    def divergence_signal(a: np.ndarray, b: np.ndarray, window: int = 20) -> np.ndarray:
+        """Rolling squared divergence between two construct time-series."""
+        sq_diff = (a - b) ** 2
+        if len(sq_diff) < window:
+            return sq_diff
+        result = np.zeros_like(sq_diff)
+        for i in range(window, len(sq_diff)):
+            result[i] = np.mean(sq_diff[i - window : i])
+        result[:window] = result[window] if window < len(sq_diff) else 0
+        return result
+
+    @staticmethod
+    def phi_derivative(phi: np.ndarray) -> np.ndarray:
+        """Rate of change of Phi over time."""
+        return np.gradient(phi)
 
     @classmethod
     def compute_all_signals(

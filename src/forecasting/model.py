@@ -1,6 +1,6 @@
 """PhiForecaster — dual-head model for Phi + construct prediction.
 
-Uses DignityBackbone (CNN1D + LSTM + Attention) as the shared encoder,
+Uses ForecastBackbone (CNN1D + LSTM + Attention) as the shared encoder,
 with two ForecastHead decoders:
   - phi_head: predicts scalar Phi trajectory [B, pred_len, 1]
   - construct_head: predicts 8 welfare constructs [B, pred_len, 8]
@@ -8,22 +8,10 @@ with two ForecastHead decoders:
 Multi-task loss: L = L_phi + alpha * L_construct (both MSE).
 """
 
-import os
-import sys
-
 import torch
 import torch.nn as nn
 
-# Add Dignity-Model to sys.path so its 'models' package (with relative imports)
-# resolves correctly. The 'core' namespace collision with tests/core/ doesn't
-# affect 'models' — only signals.py needs the importlib workaround.
-_dignity_root = os.path.join(os.path.dirname(__file__), "..", "..", "Dignity-Model")
-_dignity_root = os.path.abspath(_dignity_root)
-if _dignity_root not in sys.path:
-    sys.path.insert(0, _dignity_root)
-
-from models.backbone.hybrid import DignityBackbone  # noqa: E402
-from models.head.forecast import ForecastHead  # noqa: E402
+from src.forecasting.backbone import ForecastBackbone, ForecastHead
 
 
 class PhiForecaster(nn.Module):
@@ -31,7 +19,7 @@ class PhiForecaster(nn.Module):
 
     Architecture:
         input [B, T, input_size]
-          -> DignityBackbone -> context [B, hidden_size], attn [B, T]
+          -> ForecastBackbone -> context [B, hidden_size], attn [B, T]
           -> phi_head -> [B, pred_len, 1]
           -> construct_head -> [B, pred_len, 8]
 
@@ -55,7 +43,7 @@ class PhiForecaster(nn.Module):
     ):
         super().__init__()
 
-        self.backbone = DignityBackbone(
+        self.backbone = ForecastBackbone(
             input_size=input_size,
             hidden_size=hidden_size,
             n_layers=n_layers,
