@@ -186,8 +186,8 @@ combined_score = α·epistemic_confidence + β·welfare_relevance
 - j (joy) - positive affect
 - p (purpose) - goal alignment
 - ε (empathy) - perspective-taking
-- λ_L (legal protection) - systemic safeguarding
-- λ_P (personal protection) - bodily safety
+- λ_L (love) - generative capacity, community solidarity
+- λ_P (protection) - safeguarding, harm prevention
 - ξ (truth) - epistemic integrity
 
 ---

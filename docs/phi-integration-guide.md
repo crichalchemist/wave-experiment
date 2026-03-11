@@ -27,8 +27,8 @@ phi_metrics = {
     "j": 0.6,      # joy (positive affect)
     "p": 0.5,      # purpose (goal alignment)
     "eps": 0.4,    # empathy (perspective-taking)
-    "lam_L": 0.3,  # legal protection (systemic safeguarding)
-    "lam_P": 0.4,  # personal protection (bodily safety)
+    "lam_L": 0.3,  # love (generative capacity for flourishing)
+    "lam_P": 0.4,  # protection (safeguarding against harm)
     "xi": 0.4,     # truth (epistemic integrity)
 }
 
@@ -137,8 +137,8 @@ print(f"Welfare relevance: {welfare_score:.2f}")  # e.g., 0.74
 | **j** | Joy | wellbeing, happiness, flourishing |
 | **p** | Purpose | autonomy, agency, goals, meaning |
 | **eps** | Empathy | perspective, discrimination, marginalized |
-| **lam_L** | Legal Protection | safeguard, regulation, statute, enforcement, institutional |
-| **lam_P** | Personal Protection | violence, harm, exploitation, vulnerability, bodily safety |
+| **lam_L** | Love | growth, mutual aid, nurture, solidarity, community, capacity |
+| **lam_P** | Protection | violence, harm, exploitation, vulnerability, safeguard |
 | **xi** | Truth | suppress, conceal, falsify, contradiction |
 
 ## Default Φ Metrics
