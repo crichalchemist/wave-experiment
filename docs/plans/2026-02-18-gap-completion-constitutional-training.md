@@ -48,9 +48,9 @@ git commit -m "fix: unpin azure-ai-inference — pip self-resolves to 1.0.0b9"
 
 ---
 
-### Task 1: Wire Ollama (VLLMProvider) to live inference
+### Task 1: Wire vLLM (VLLMProvider) to live inference
 
-Ollama is running at `http://localhost:11434/v1` with `deepseek-r1:7b` available. The API layer currently uses `MockProvider`. This task wires real inference end-to-end.
+vLLM is running at `http://localhost:8000/v1` with `detective` available. The API layer currently uses `MockProvider`. This task wires real inference end-to-end.
 
 **Files:**
 - Create: `.env.local` (gitignored, holds runtime config)
@@ -59,9 +59,9 @@ Ollama is running at `http://localhost:11434/v1` with `deepseek-r1:7b` available
 **Step 1: Verify Ollama is serving**
 
 ```bash
-curl -s http://localhost:11434/v1/models | python3 -m json.tool | grep deepseek
+curl -s http://localhost:8000/v1/models | python3 -m json.tool | grep deepseek
 ```
-Expected: `"deepseek-r1:7b"` in the response.
+Expected: `"detective"` in the response.
 
 **Step 2: Write a failing test for live-provider round-trip**
 
@@ -70,8 +70,8 @@ Add to `tests/api/test_routes.py`:
 def test_analyze_with_vllm_env(monkeypatch, tmp_path):
     """Verify create_app uses provider_from_env() when DETECTIVE_PROVIDER is set."""
     monkeypatch.setenv("DETECTIVE_PROVIDER", "vllm")
-    monkeypatch.setenv("VLLM_BASE_URL", "http://localhost:11434/v1")
-    monkeypatch.setenv("VLLM_MODEL", "deepseek-r1:7b")
+    monkeypatch.setenv("VLLM_BASE_URL", "http://localhost:8000/v1")
+    monkeypatch.setenv("VLLM_MODEL", "detective")
     from importlib import reload
     import src.api.routes as routes_module
     reload(routes_module)
@@ -93,8 +93,8 @@ Expected: FAIL (routes.py hardcodes MockProvider).
 ```bash
 cat > .env.local << 'EOF'
 DETECTIVE_PROVIDER=vllm
-VLLM_BASE_URL=http://localhost:11434/v1
-VLLM_MODEL=deepseek-r1:7b
+VLLM_BASE_URL=http://localhost:8000/v1
+VLLM_MODEL=detective
 DETECTIVE_GRAPH_BACKEND=memory
 DETECTIVE_VAULT_PATH=docs/vault
 EOF
@@ -1363,7 +1363,7 @@ Usage:
   from src.core.providers import provider_from_env, AzureFoundryProvider
 
   cfg = ConstitutionalWarmupConfig(max_examples=200)
-  local = VLLMProvider(base_url="http://localhost:11434/v1", model="deepseek-r1:7b")
+  local = VLLMProvider(base_url="http://localhost:8000/v1", model="detective")
   critic = AzureFoundryProvider(...)
   count = run_constitutional_warmup(cfg, local, critic)
   print(f"Generated {count} constitutional preference pairs")

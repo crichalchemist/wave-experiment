@@ -27,7 +27,8 @@ phi_metrics = {
     "j": 0.6,      # joy (positive affect)
     "p": 0.5,      # purpose (goal alignment)
     "eps": 0.4,    # empathy (perspective-taking)
-    "lam": 0.3,    # protection (safeguarding)
+    "lam_L": 0.3,  # legal protection (systemic safeguarding)
+    "lam_P": 0.4,  # personal protection (bodily safety)
     "xi": 0.4,     # truth (epistemic integrity)
 }
 
@@ -118,7 +119,7 @@ Findings relating to **scarce constructs** receive high welfare relevance scores
 from src.inference.welfare_scoring import score_hypothesis_welfare
 
 h = Hypothesis.create("Evidence of ongoing resource deprivation", 0.8)
-phi_metrics = {"c": 0.1, "lam": 0.2}  # care and protection are scarce
+phi_metrics = {"c": 0.1, "lam_L": 0.2, "lam_P": 0.2}  # care and protection are scarce
 
 welfare_score = score_hypothesis_welfare(h, phi_metrics)
 # High welfare_relevance due to scarce constructs
@@ -136,7 +137,8 @@ print(f"Welfare relevance: {welfare_score:.2f}")  # e.g., 0.74
 | **j** | Joy | wellbeing, happiness, flourishing |
 | **p** | Purpose | autonomy, agency, goals, meaning |
 | **eps** | Empathy | perspective, discrimination, marginalized |
-| **lam** | Protection | safeguard, violence, harm, exploitation, vulnerability |
+| **lam_L** | Legal Protection | safeguard, regulation, statute, enforcement, institutional |
+| **lam_P** | Personal Protection | violence, harm, exploitation, vulnerability, bodily safety |
 | **xi** | Truth | suppress, conceal, falsify, contradiction |
 
 ## Default Φ Metrics
@@ -150,7 +152,8 @@ DEFAULT_PHI_METRICS = {
     "j": 0.5,
     "p": 0.5,
     "eps": 0.5,
-    "lam": 0.5,
+    "lam_L": 0.5,
+    "lam_P": 0.5,
     "xi": 0.5,
 }
 ```
@@ -188,7 +191,8 @@ curl -X POST http://localhost:8000/evolve \
     "evidence_path": "Evidence of resource deprivation",
     "phi_metrics": {
       "c": 0.2,
-      "lam": 0.3
+      "lam_L": 0.3,
+      "lam_P": 0.3
     }
   }'
 ```

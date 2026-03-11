@@ -47,15 +47,17 @@ NerResult(frozen): entities, backend, text_length
     .unique_texts(label?) -> tuple[str, ...]
 ```
 
-### Integration point
+### Integration points
 
-`agent.py:_enrich_phase()` replaces word-splitting with:
+1. `agent.py:_enrich_phase()` replaces word-splitting with:
 ```python
 ner_result = extract_entities(doc.text)
 for ent in ner_result.entities:
     if ent.label in ("PERSON", "ORG"):
         all_entity_names.append(ent.text)
 ```
+
+2. `agent.py:_audit_phase()` uses NER to extract top entities from findings for person auditing (ADR-027).
 
 ### Optional dependency
 

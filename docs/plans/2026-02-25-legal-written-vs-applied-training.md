@@ -692,16 +692,16 @@ git commit -m "feat(cli): add legal-warmup command for domain-specific DPO pair 
 
 **Files:**
 - Output: `data/training/legal_pairs.jsonl`
-- Uses: Local Ollama (deepseek-r1:7b) + Azure Foundry critic
+- Uses: Local vLLM (model=detective) + Azure Foundry critic
 
 This is not a code task — it's a pipeline execution. Estimated time: 6-18 hours depending on source availability and inference speed.
 
-**Step 1: Verify Ollama is running**
+**Step 1: Verify vLLM is running**
 
 ```bash
-curl -s http://localhost:11434/v1/models | python -m json.tool
+curl -s http://localhost:8000/v1/models | python -m json.tool
 ```
-Expected: Model list including `deepseek-r1:7b`
+Expected: Model list including `detective`
 
 **Step 2: Run criminal justice domain first (smoke test)**
 

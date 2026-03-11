@@ -10,7 +10,7 @@
 
 | Test | Status | Key Verification |
 |------|--------|-----------------|
-| **1. Construct Inference** | ✅ PASS | 7 Φ constructs correctly inferred from text |
+| **1. Construct Inference** | ✅ PASS | 8 Φ constructs correctly inferred from text |
 | **2. Φ Gradient Computation** | ✅ PASS | Nash SWF gradients: scarce constructs have high urgency |
 | **3. Hypothesis Welfare Scoring** | ✅ PASS | Soft saturation normalization to [0,1] range |
 | **4. Gap Urgency Computation** | ✅ PASS | Formula: Σ(Φ_gradients) × epistemic_confidence |
@@ -27,11 +27,11 @@
 **Verified:** Text correctly mapped to threatened Φ constructs
 
 - "Evidence of resource deprivation" → `c` (care) ✓
-- "Testimony about ongoing violence" → `lam` (protection) ✓
+- "Testimony about ongoing violence" → `lam_P` (personal protection) ✓
 - "Suppressed testimony and concealed evidence" → `xi` (truth) ✓
 - "Meeting scheduled for Tuesday" → `()` (no constructs) ✓
 
-**7 Constructs:** c (care), κ (compassion), j (joy), p (purpose), ε (empathy), λ (protection), ξ (truth)
+**8 Constructs:** c (care), κ (compassion), j (joy), p (purpose), ε (empathy), λ_L (legal protection), λ_P (personal protection), ξ (truth)
 
 ---
 
@@ -41,7 +41,7 @@
 
 ```
 ∂Φ/∂c at x=0.1: 1.429   (scarce → high gradient)
-∂Φ/∂λ at x=0.5: 0.286   (moderate)
+∂Φ/∂λ_L at x=0.5: 0.286  (moderate)
 ∂Φ/∂ξ at x=0.9: 0.159   (abundant → low gradient)
 ```
 
@@ -78,7 +78,7 @@
 | Gap Description | Type | Confidence | Constructs | Urgency |
 |----------------|------|------------|------------|---------|
 | Resource allocation gap 2013-2017 | temporal | 0.90 | (c) | 1.286 |
-| Suppressed testimony about violence | contradiction | 0.85 | (λ, ξ) | 1.012 |
+| Suppressed testimony about violence | contradiction | 0.85 | (λ_P, ξ) | 1.012 |
 | Typo in meeting minutes | evidential | 0.95 | () | 0.000 |
 
 **Formula:** `Urgency = Σ(Φ_gradients) × epistemic_confidence`
@@ -105,7 +105,7 @@
 **Verified:** `evolve_parallel()` integrates welfare scoring with combined_score() sorting
 
 **3 hypotheses evolved with parameters:**
-- phi_metrics: {"c": 0.2, "λ": 0.3}
+- phi_metrics: {"c": 0.2, "lam_L": 0.3, "lam_P": 0.3}
 - α=0.7 (epistemic weight)
 - β=0.3 (welfare weight)
 
@@ -164,7 +164,7 @@
 **Nash Social Welfare Function:**
 ```
 Φ(humanity) = PRODUCT_{i} (x_i^{α_i})^{θ_i}
-∂Φ/∂x ≈ θ/x (theta = 1/7 for equal weighting)
+∂Φ/∂x ≈ θ/x (theta = 1/8 for equal weighting)
 ```
 
 **Soft Saturation Normalization:**
@@ -180,13 +180,14 @@ combined_score = α·epistemic_confidence + β·welfare_relevance
 α > β always (Constitutional Principle 1)
 ```
 
-**7 Φ Constructs:**
+**8 Φ Constructs:**
 - c (care) - resource allocation
 - κ (compassion) - responsive support
 - j (joy) - positive affect
 - p (purpose) - goal alignment
 - ε (empathy) - perspective-taking
-- λ (protection) - safeguarding
+- λ_L (legal protection) - systemic safeguarding
+- λ_P (personal protection) - bodily safety
 - ξ (truth) - epistemic integrity
 
 ---

@@ -58,6 +58,8 @@ OcrFallbackChain
 - `OcrFallbackChain` satisfies `OcrBackend` Protocol (has `.name` and `.extract_text()`)
 - `document_ingestion.py` uses `extract_text_with_confidence()` to get both text and confidence
 - `DocumentRecord` gains `ocr_confidence: float` field for downstream quality filtering
+- Chain initialization: `_get_ocr_chain()` places `default_backend` first, adds the other backend as fallback (DeepSeek primary → Tesseract fallback on GPU; Tesseract-only on CPU)
+- Multi-page PDFs: per-page confidence is arithmetic-averaged into `DocumentRecord.ocr_confidence`
 
 ## Consequences
 

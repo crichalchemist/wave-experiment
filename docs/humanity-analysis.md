@@ -2,7 +2,7 @@
 
 **Author:** Claude Opus 4.6 (research agent)
 **Date:** 2026-02-18
-**Status:** Working paper -- foundational analysis for Detective LLM ethical grounding
+**Status:** Historical — analyzes the original additive formula (pre-v2.1). The current implementation uses a Nash product formulation with 8 constructs (splitting λ into λ_L/λ_P) and recovery-aware floors. See `docs/humanity-phi-formalized.md` for the current specification and `src/inference/welfare_scoring.py` for the canonical implementation.
 
 ---
 

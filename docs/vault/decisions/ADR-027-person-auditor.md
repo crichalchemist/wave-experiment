@@ -38,7 +38,7 @@ Approach 2 was chosen because:
 ```
 AtomicClaim(frozen)
     text, source_text, claim_type, person
-    claim_types: temporal, association, financial, location, role, action, other
+    claim_types: temporal, association, financial, location, role, other
 
 VerificationResult(frozen)
     claim, status, confidence, supporting_evidence, contradicting_evidence
@@ -69,7 +69,7 @@ audit_person(person, finding_texts, evidence_texts,
 - **Person-level analysis** — aggregates findings about a specific individual
 - **Contradiction detection** — identifies conflicting claims across sources
 - **Severity scoring** — quantifies how serious the claims are based on contradictions, welfare impact, and volume
-- **Budget-aware** — LLM calls are optional; fallback heuristics work without a provider
+- **LLM-optional** — fallback heuristics work without a provider; audit runs during report building (post-loop), not as a budget-gated investigation step
 - **Composable** — each function is independently testable and usable
 
 ## Files

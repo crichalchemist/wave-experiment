@@ -31,44 +31,64 @@ src/core/model.py               DetectiveGPT (PyTorch nn.Module)
                                  Multi-task: language model + gap detection heads
     ↓ uses
 src/detective/                  Gap analysis core
-  hypothesis.py                   Immutable Hypothesis with auditable lineage
+  hypothesis.py                   Immutable Hypothesis with auditable lineage + welfare scoring
   evolution.py                    Hypothesis evolution via experience library (FLEX)
+  parallel_evolution.py           Graph of Thought parallel hypothesis branching
   experience.py                   ExperienceLibrary — immutable tuple of past trajectories
-  module_a.py                     Module A: cognitive bias classifier (DistilBERT)
+  module_a.py                     Module A: cognitive bias detection (regex + LLM scoring)
+  module_b.py                     Module B: historical determinism detection
+  module_c.py                     Module C: geopolitical presumption detection
   constitution.py                 Constitutional AI self-critique loop
+  person_auditor.py               Claim decomposition, verification, severity scoring
+  legal_gap_detector.py           Written-vs-applied law gap detection
+  investigation/                  Autonomous investigation agent
+    agent.py                        plan→gather→analyze→reflect→evolve→enrich loop
+    clearnet_sources.py             6 clearnet adapters (DDG, CourtListener, SEC, OCCRP, IICSA)
+    source_protocol.py              InvestigationSource Protocol + source factory
 
 src/inference/                  Analytical pipeline
-  pipeline.py                     4-layer pipeline: intent → evidence → reasoning → verify
+  pipeline.py                     4-layer pipeline + inline gap detection + token budgeting
+  welfare_scoring.py              Φ(humanity) welfare function (v2.1, 8 constructs)
+  welfare_classifier.py           DistilBERT construct classifier (Hub-first loading)
+  scenario_extraction.py          Corpus → construct profiles → training scenarios
   reflection.py                   Constitutional reflection trigger injection
 
-src/data/                       Knowledge graph
-  knowledge_graph.py              NetworkX-backed graph with typed edges + n-hop decay
+src/forecasting/                Phi trajectory forecasting
+  model.py                        PhiForecaster (ForecastBackbone: CNN1D→LSTM→Attention)
+  pipeline.py                     PhiPipeline — feature engineering + inference
+  signals.py                      PhiSignalProcessor — signal preprocessing
+
+src/data/                       Data & knowledge graph
   graph_store.py                  GraphStore Protocol (InMemoryGraph / KuzuGraph)
   kuzu_graph.py                   Persistent Kuzu backend (production)
+  epstein_adapter.py              Epstein-docs parser + entity normalisation
+  ingest_epstein.py               Graph population pipeline
+  entity_filter.py                3-layer entity noise filter + drop logging
+  ner.py                          spaCy NER + heuristic fallback
+  dedup.py                        MinHash/LSH near-duplicate detection
+  sourcing/                       FOIA scraping, legal sources, HF/DOJ loaders, OCR
 
 src/security/                   Injection defence
   sanitizer.py                    Layer 1: pattern-based injection detection at ingestion
   prompt_guard.py                 Layer 2: constitutional prompt isolation at inference
 
 src/training/                   Alignment training
-  train_sft.py                    SFT warm-up on gap-annotation data
+  constitutional_warmup.py        Constitutional preference pair generation (CAI loop)
+  train_multitask.py              Multi-task PyTorch trainer (3-head loss)
   train_dpo.py                    DPO preference learning from critique pairs
-  train_grpo.py                   GRPO online RL from constitution-grounded rewards
-  generate_preferences.py         Automated preference pair generation (no annotators)
 
-src/memory/                     Persistent memory
-  vault.py                        FileVaultClient — Obsidian-compatible filesystem vault
-  mcp_vault.py                    MCP integration for Obsidian Local REST API
-  adr.py                          Architectural Decision Record (ADR) helpers
+src/core/                       Shared infrastructure
+  providers.py                    VLLMProvider, AzureFoundryProvider, HybridRoutingProvider
+  reasoning_trace.py              Chain-of-thought capture from scoring calls
+  trace_store.py                  JSONL persistence + SSE streaming for traces
 
 src/api/                        REST API
-  routes.py                       FastAPI endpoints for gap analysis and visualisation
+  routes.py                       FastAPI endpoints + trace streaming + investigation API
 
 src/cli/                        Command-line interface
   main.py                         Click CLI — `detective` entry point
 
-evaluation/
-  independent_discovery.py        Precision / recall / F1 evaluation harness
+spaces/maninagarden/            Phi Forecaster Gradio workbench (ZeroGPU, 7 tabs)
 ```
 
 ### Multi-task model
@@ -86,7 +106,7 @@ token_emb + pos_emb
                      (gap type classification)
 ```
 
-Multi-task loss: `L_total = L_language + α·L_gap` (α = 0.3)
+Multi-task loss: `L_total = L_language + α·L_gap + β·L_assumption` (α=β=0.3)
 
 ### Gap type taxonomy
 
@@ -106,7 +126,7 @@ Multi-task loss: `L_total = L_language + α·L_gap` (α = 0.3)
 | B | `HISTORICAL_DETERMINISM` | Assuming documents record events neutrally and in order |
 | C | `GEOPOLITICAL_PRESUMPTION` | Assuming institutions behaved as their stated norms describe |
 
-Modules B and C are planned; Module A (`src/detective/module_a.py`) is implemented using a DistilBERT classifier (`distilbert-base-uncased` placeholder — replace with a fine-tuned checkpoint).
+All three modules are implemented: Module A uses regex triggers + LLM-scored confirmation for cognitive biases, Module B detects historical determinism via regex + LLM spans, Module C matches geopolitical actor + verb patterns with LLM scoring. All share `src/core/scoring.py` for response parsing.
 
 ### Knowledge graph
 
@@ -134,6 +154,8 @@ Using a different model as critic produces stronger training signal than same-mo
 2. **`retrieve_evidence`** — graph neighbourhood query (direct + 1-hop expansion)
 3. **`fuse_reasoning`** — single LLM call: evidence → numbered reasoning chain
 4. **`verify_inline`** — constitutional reflection trigger + confidence scoring
+
+Evidence is truncated to fit within the vLLM context window (token budget: 6000 tokens, reserving 2000 for verification). After verification, if confidence exceeds 0.3, an inline gap scan detects up to 3 information gaps with welfare scoring when Φ metrics are available.
 
 ### Immutable hypothesis lineage
 
@@ -179,24 +201,21 @@ Core dependencies: `torch`, `transformers`, `networkx`, `pydantic`, `fastapi`, `
 Copy `deployment/.env.example` to `.env.local` (gitignored) and fill in real values. **Never commit credentials.**
 
 ```bash
-# Select provider: vllm (local) or azure (Claude via Azure AI Foundry)
+# Select provider: vllm (local), azure (Claude via Azure AI Foundry), or hybrid
 DETECTIVE_PROVIDER=vllm
 
 # Local vLLM endpoint (OpenAI-compatible)
-VLLM_BASE_URL=http://localhost:11434/v1
-VLLM_MODEL=deepseek-r1:7b
+VLLM_BASE_URL=http://localhost:8000/v1
+VLLM_MODEL=detective                  # LoRA module name (or base model ID)
 
 # Azure AI Foundry — Claude critic
-AZURE_FOUNDRY_ENDPOINT=https://<your-resource>.services.ai.azure.com/models
-AZURE_FOUNDRY_KEY=<your-key>
-AZURE_FOUNDRY_MODEL=claude-sonnet-4-5
+AZURE_ENDPOINT=https://<your-resource>.services.ai.azure.com/
+AZURE_API_KEY=<your-key>
+AZURE_MODEL=claude-sonnet-4-5-2
 
 # Persistent graph store
 DETECTIVE_GRAPH_BACKEND=kuzu
-DETECTIVE_KUZU_PATH=/data/detective/graph.kuzu
-
-# Obsidian vault path (filesystem mode)
-DETECTIVE_VAULT_PATH=/data/detective/vault
+DETECTIVE_KUZU_PATH=data/kuzu_db
 ```
 
 `DETECTIVE_PROVIDER` is required at startup — the system fails fast with a clear error if it is not set.
@@ -307,13 +326,32 @@ Key design decisions are recorded as ADRs in `docs/vault/decisions/`:
 | ADR | Decision |
 |---|---|
 | ADR-001 | `ModelProvider` Protocol abstraction (vLLM / Azure Foundry) |
-| ADR-002 | Moral compass as dual-function constitution (training signal + inline constraint) |
+| ADR-002 | Moral compass as dual-function constitution |
 | ADR-003 | Independent DistilBERT classifiers for Modules A/B/C |
 | ADR-004 | Immutable ExperienceLibrary (FLEX) over mutable engine |
 | ADR-005 | Typed semantic relations on knowledge graph edges |
 | ADR-006 | Prompt injection defence and constitutional resilience |
 | ADR-007 | American law as written vs. law as applied |
 | ADR-008 | Persistent graph store (Kuzu) replacing NetworkX in-memory |
+| ADR-009 | Hub-first welfare classifier loading |
+| ADR-010 | Trajectory urgency scoring (4-weight combined score) |
+| ADR-011 | Scenario extraction pipeline (detective → forecaster) |
+| ADR-013 | Hybrid provider routing (local scoring + cloud reasoning) |
+| ADR-014 | Reasoning trace capture with SSE streaming |
+| ADR-015 | Epstein-docs ingestion pipeline |
+| ADR-016 | Entity filter (3-layer noise reduction) |
+| ADR-017 | ZeroGPU Gradio workbench integration |
+| ADR-018 | SourceDocument Protocol for sourcing pipeline |
+| ADR-019 | Centralized logging convention |
+| ADR-020 | Python 3.13 compatibility + dependency cleanup |
+| ADR-021 | Autonomous investigation agent |
+| ADR-022 | Clearnet investigation sources |
+| ADR-023 | Assumption detection integration (A+B+C in agent) |
+| ADR-024 | OCR fallback chain with confidence scoring |
+| ADR-025 | spaCy NER pipeline |
+| ADR-026 | MinHash/LSH near-duplicate detection |
+| ADR-027 | Person auditor (claim decomposition + verification) |
+| ADR-028 | Multi-task loss integration (3-head training) |
 
 ### Vault memory
 
@@ -329,22 +367,24 @@ Both implement the `VaultClient` Protocol and are interchangeable at runtime.
 ## Data layout
 
 ```
-data/epstein/raw/          ← Source document repositories (gitignored)
-data/epstein/processed/    ← Parsed Document objects (gitignored)
+data/epstein-docs/         ← Epstein document corpus (gitignored)
+data/foia/                 ← FOIA document archives (gitignored)
+data/kuzu_db/              ← Kuzu graph database directory (gitignored)
+data/training/             ← Training data: constitutional pairs, welfare data (gitignored)
 data/annotations/          ← Gap/assumption annotation JSONL (gitignored)
-checkpoints/               ← Model .pt files (gitignored)
-docs/vault/                ← Obsidian vault: ADRs, hypothesis traces, gap findings
+checkpoints/               ← Model .pt files and DPO adapters (gitignored)
+docs/vault/                ← ADRs, hypothesis traces, gap findings
 ```
-
-The Epstein corpus (`data/epstein/`) is the primary **analysis target** — documents the system reads and interrogates for gaps at inference time. It is not training data in the conventional sense. That said, the same corpus can inform a domain-specific SFT pass if patterns in the investigative record need to be baked into the model's weights rather than retrieved at runtime. Both uses are valid; the distinction matters for deciding what goes into `data/annotations/` (supervised training labels) versus `data/epstein/processed/` (inference-time retrieval documents).
 
 ---
 
 ## Project status
 
-The core analytical framework — gap taxonomy, assumption taxonomy, immutable hypothesis lineage, experience library, 4-layer pipeline, constitutional self-critique, injection defence, and legal domain grounding — is implemented and tested. Some capabilities (Modules B and C, full Kuzu persistence, LlamaIndex retrieval, complete training loops) are scaffolded and documented but not yet fully wired.
+The analytical framework is implemented and tested (1097 tests passing): gap taxonomy (5 types), assumption taxonomy (3 types, Modules A/B/C all implemented), immutable hypothesis lineage, parallel hypothesis evolution (Graph of Thought), 4-layer analytical pipeline with inline gap detection, constitutional self-critique, injection defence, legal domain grounding, Φ(humanity) welfare scoring (v2.1, 8 constructs), autonomous investigation agent (plan→gather→analyze→reflect→evolve→enrich), 8 pluggable investigation sources (FOIA, graph, web, news, CourtListener, SEC EDGAR, OCCRP, IICSA), person auditing, entity NER, MinHash dedup, and a Phi trajectory forecasting bridge.
 
-The canonical implementation plan and system design documents are in `docs/plans/` — these are internal working documents that track research synthesis and task-by-task implementation progress, not public specifications. The living intellectual foundation is `docs/constitution.md`.
+Deployment uses vLLM with optional LoRA adapter support for the DPO-trained detective model. See `deployment/vllm_start.sh --lora` for setup.
+
+The canonical implementation plan and system design documents are in `docs/plans/`. The living intellectual foundation is `docs/constitution.md`.
 
 ---
 

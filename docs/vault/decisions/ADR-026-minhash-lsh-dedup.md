@@ -42,6 +42,7 @@ src/data/dedup.py
 
     DedupIndex
         .add(doc_id, text) -> DocumentFingerprint
+        .is_duplicate(text) -> bool           # fast-path: early-returns on first LSH match
         .find_duplicates(doc_id) -> list[DuplicateMatch]
         .deduplicate() -> list[DedupResult]
 
