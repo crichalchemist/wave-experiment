@@ -73,12 +73,26 @@ deployment/.env.service
 # Git worktrees
 .worktrees/
 
-# Node modules (if any)
+# Node / npm
 node_modules/
 package-lock.json
+package.json
+
+# Lockfiles
+uv.lock
+
+# Screenshots
+*.png
 
 # Temporary/research files
 thoughts.txt
 pdf_insights.md
 construction research/
 src/data/smiles and cries/
+breaks.md
+
+# Playwright MCP
+.playwright-mcp/
+
+# Claude Flow
+.claude-flow/

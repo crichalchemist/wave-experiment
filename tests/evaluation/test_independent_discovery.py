@@ -1,7 +1,7 @@
 """Tests for the independent-discovery evaluation harness."""
 import pytest
 
-from evaluation.independent_discovery import (
+from src.evaluation.independent_discovery import (
     EMPTY_EVAL_DISCOVERY_RATE,
     MAX_PRECISION_THRESHOLD,
     MIN_PRECISION_THRESHOLD,

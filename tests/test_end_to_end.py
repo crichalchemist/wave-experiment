@@ -23,7 +23,7 @@ from src.inference.pipeline import (
     AnalyticalIntent,
 )
 from src.inference.reflection import inject_reflection_trigger
-from evaluation.independent_discovery import DiscoveryEvaluation, summarise, EvaluationSummary
+from src.evaluation.independent_discovery import DiscoveryEvaluation, summarise, EvaluationSummary
 
 
 # ---------------------------------------------------------------------------

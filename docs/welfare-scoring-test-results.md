@@ -196,7 +196,7 @@ combined_score = α·epistemic_confidence + β·welfare_relevance
 
 - **Integration Guide:** `docs/phi-integration-guide.md`
 - **Implementation Plan:** `docs/plans/2026-02-19-humanity-phi-implementation-plan.md`
-- **Specification:** `humanity.md`
+- **Specification:** `docs/humanity.md`
 - **This Test Report:** `docs/welfare-scoring-test-results.md`
 
 ---

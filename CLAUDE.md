@@ -33,7 +33,7 @@ detective network --entity "Entity A" --hops 3
 detective investigate --mode hypothesis --seed "Entity X had undisclosed ties" --max-steps 20
 
 # Bootstrap directory structure (idempotent, for new checkouts)
-python bootstrap.py
+python scripts/bootstrap.py
 
 # Note: async tests require pytest-asyncio (included in dev deps)
 ```

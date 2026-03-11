@@ -202,6 +202,6 @@ Response includes hypothesis with welfare scoring applied.
 ## References
 
 - **Design Doc:** `docs/plans/2026-02-19-humanity-phi-integration.md`
-- **Φ Specification:** `humanity.md`
+- **Φ Specification:** `docs/humanity.md`
 - **Theoretical Analysis:** `docs/humanity-analysis.md`
 - **Constitution:** `docs/constitution.md`

@@ -316,7 +316,7 @@ pytest tests/test_hypothesis.py::test_hypothesis_update   # single test
 ruff check .          # lint
 ruff format .         # format
 mypy src/             # type check
-python bootstrap.py   # bootstrap directory structure (idempotent)
+python scripts/bootstrap.py   # bootstrap directory structure (idempotent)
 ```
 
 ### Architectural decisions
