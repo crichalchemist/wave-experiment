@@ -4,6 +4,12 @@ from pathlib import Path
 
 import click
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(".env.local", override=False)
+except ImportError:
+    pass
+
 from src.core.providers import provider_from_env
 from src.detective.constitution import load_constitution
 from src.security.sanitizer import sanitize_document

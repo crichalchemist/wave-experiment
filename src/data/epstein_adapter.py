@@ -116,15 +116,15 @@ def iter_pages(
                 page_number=meta.get("page_number", ""),
                 full_text=data.get("full_text", ""),
                 people=tuple(
-                    normalize(p, people_map) for p in entities.get("people", [])
+                    normalize(p, people_map) for p in (entities.get("people") or [])
                 ),
                 organizations=tuple(
-                    normalize(o, org_map) for o in entities.get("organizations", [])
+                    normalize(o, org_map) for o in (entities.get("organizations") or [])
                 ),
                 locations=tuple(
-                    normalize(loc, loc_map) for loc in entities.get("locations", [])
+                    normalize(loc, loc_map) for loc in (entities.get("locations") or [])
                 ),
-                dates=tuple(entities.get("dates", [])),
+                dates=tuple(entities.get("dates") or []),
                 document_type=meta.get("document_type", ""),
             )
 
