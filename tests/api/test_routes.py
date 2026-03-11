@@ -23,8 +23,14 @@ from src.api.routes import create_app  # noqa: E402
 
 @pytest.fixture
 def client() -> TestClient:
-    """Fresh app per test — avoids cross-test state bleed from the InMemoryGraph."""
-    app = create_app()
+    """Fresh app per test — avoids cross-test state bleed from the InMemoryGraph.
+
+    Explicitly passes an InMemoryGraph to avoid dependence on .env.local
+    (which may set DETECTIVE_GRAPH_BACKEND=kuzu and fail in test environments).
+    """
+    from src.data.graph_store import InMemoryGraph
+
+    app = create_app(graph=InMemoryGraph())
     return TestClient(app)
 
 

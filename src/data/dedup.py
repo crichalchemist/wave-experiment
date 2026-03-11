@@ -110,6 +110,10 @@ def compute_minhash(
 def estimate_similarity(sig1: object, sig2: object) -> float:
     """Estimate Jaccard similarity between two signatures."""
     if _HAS_DATASKETCH and isinstance(sig1, _MinHash) and isinstance(sig2, _MinHash):
+        # Two empty MinHash objects have identical default hash values,
+        # which makes jaccard() return 1.0 — but empty sets have 0 similarity.
+        if sig1.is_empty() and sig2.is_empty():
+            return 0.0
         return float(sig1.jaccard(sig2))
 
     # Fallback: exact Jaccard on frozensets

@@ -139,8 +139,8 @@ def test_graph_store_from_env_memory_explicit(monkeypatch: pytest.MonkeyPatch) -
 
 def test_graph_store_from_env_unknown_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unknown backends must fail fast rather than silently fall back to memory."""
-    monkeypatch.setenv(_GRAPH_BACKEND_ENV, "kuzu")
-    with pytest.raises(ValueError, match="kuzu"):
+    monkeypatch.setenv(_GRAPH_BACKEND_ENV, "nosuchbackend")
+    with pytest.raises(ValueError, match="nosuchbackend"):
         graph_store_from_env()
 
 

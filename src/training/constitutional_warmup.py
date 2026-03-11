@@ -15,7 +15,7 @@ Usage:
   from src.core.providers import provider_from_env, AzureFoundryProvider
 
   cfg = ConstitutionalWarmupConfig(max_examples=200)
-  local = VLLMProvider(base_url="http://localhost:11434/v1", model="deepseek-r1:7b")
+  local = VLLMProvider(base_url="http://localhost:8000/v1", model="detective")
   critic = AzureFoundryProvider(...)
   count = run_constitutional_warmup(cfg, local, critic)
   print(f"Generated {count} constitutional preference pairs")

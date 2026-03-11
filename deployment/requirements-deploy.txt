@@ -1,8 +1,9 @@
 # Detective LLM — deployment requirements
 # PyTorch installed separately in setup.sh (CPU wheel from pytorch.org)
 
-# Inference client (Ollama's /v1 endpoint is OpenAI-compatible)
+# Inference client (vLLM's /v1 endpoint is OpenAI-compatible)
 openai
+vllm
 
 # Azure AI Foundry (Claude critic/fallback)
 azure-ai-inference

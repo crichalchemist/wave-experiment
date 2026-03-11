@@ -9,7 +9,7 @@ Layers:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from src.core.providers import ModelProvider
 from src.data.graph_store import GraphStore
@@ -101,6 +101,7 @@ class AnalysisResult:
     confidence: float
     welfare_relevance: float = 0.0
     threatened_constructs: tuple[str, ...] = ()
+    gaps: tuple = ()  # tuple[Gap, ...] — detected information gaps
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +211,126 @@ def _build_neighbour_map(
     Uses successors() so all backends participate without private-attribute access.
     """
     return {node: set(graph.successors(node)) for node in nodes}
+
+
+# ---------------------------------------------------------------------------
+# Token budget — truncate evidence to fit vLLM context window
+# ---------------------------------------------------------------------------
+
+# Approximate chars-per-token for English text (conservative estimate).
+# vLLM default max-model-len is 8192 tokens; we reserve headroom for the
+# fuse prompt header/footer (~200 tokens) and the verify prompt (~2000 tokens).
+_CHARS_PER_TOKEN: int = 4
+_DEFAULT_EVIDENCE_TOKEN_BUDGET: int = 6000
+_VERIFY_PROMPT_TOKEN_RESERVE: int = 2000
+
+
+def _truncate_evidence(
+    evidence: list[Evidence],
+    token_budget: int = _DEFAULT_EVIDENCE_TOKEN_BUDGET,
+) -> list[Evidence]:
+    """Trim evidence list to fit within a token budget.
+
+    Keeps evidence items in relevance order (highest first), dropping
+    tail items when the cumulative character count exceeds the budget.
+    This prevents silent truncation or 400 errors from vLLM when the
+    fuse_reasoning prompt exceeds max-model-len.
+    """
+    char_budget = (token_budget - _VERIFY_PROMPT_TOKEN_RESERVE) * _CHARS_PER_TOKEN
+    if char_budget <= 0:
+        return evidence[:1] if evidence else []
+
+    # Sort by relevance descending so we keep the best evidence
+    sorted_ev = sorted(evidence, key=lambda e: e.relevance, reverse=True)
+
+    kept: list[Evidence] = []
+    total_chars = 0
+    for ev in sorted_ev:
+        item_chars = len(ev.node_id) + len(ev.content) + 30  # overhead per item
+        if total_chars + item_chars > char_budget and kept:
+            break
+        kept.append(ev)
+        total_chars += item_chars
+
+    return kept
+
+
+# ---------------------------------------------------------------------------
+# Inline gap detection — lightweight scan after verification
+# ---------------------------------------------------------------------------
+
+_GAP_SCAN_PROMPT: str = (
+    "You are an information gap analyst. Given the claim and evidence below, "
+    "identify 0-3 information gaps — things that are absent, suppressed, or "
+    "undocumented that should be present.\n\n"
+    "For each gap, reply with one line in this exact format:\n"
+    "  GAP|type|description\n"
+    "Where type is one of: temporal, evidential, contradiction, normative, doctrinal\n"
+    "If no gaps are found, reply with: NONE\n\n"
+    "Claim: {claim}\n\n"
+    "Evidence:\n{evidence}\n"
+)
+
+
+def _detect_gaps_inline(
+    claim: str,
+    evidence: list[Evidence],
+    provider: ModelProvider,
+) -> list:
+    """Run a lightweight LLM-assisted gap scan on the claim and evidence.
+
+    Returns a list of Gap objects. Fails gracefully (returns []) on parse
+    errors or provider failures — gap detection is advisory, not blocking.
+    """
+    from src.core.types import Gap, GapType
+
+    evidence_text = "\n".join(
+        f"- [{e.node_id}] {e.content}" for e in evidence[:10]
+    ) if evidence else "(no evidence)"
+
+    prompt = _GAP_SCAN_PROMPT.format(claim=claim[:1000], evidence=evidence_text[:3000])
+
+    try:
+        response = provider.complete(prompt)
+    except Exception:
+        return []
+
+    if "NONE" in response.strip().upper()[:10]:
+        return []
+
+    type_map = {
+        "temporal": GapType.TEMPORAL,
+        "evidential": GapType.EVIDENTIAL,
+        "contradiction": GapType.CONTRADICTION,
+        "normative": GapType.NORMATIVE,
+        "doctrinal": GapType.DOCTRINAL,
+    }
+
+    gaps: list[Gap] = []
+    for line in response.splitlines():
+        line = line.strip()
+        if not line.startswith("GAP|"):
+            continue
+        parts = line.split("|", 2)
+        if len(parts) < 3:
+            continue
+        gap_type_str = parts[1].strip().lower()
+        description = parts[2].strip()
+        gap_type = type_map.get(gap_type_str, GapType.EVIDENTIAL)
+        if description:
+            gaps.append(Gap(
+                type=gap_type,
+                description=description,
+                confidence=0.5,  # LLM-detected, moderate confidence
+                location=claim[:100],
+            ))
+
+    return gaps[:3]  # cap at 3
+
+
+# Confidence threshold for running the gap scan — below this the analysis
+# is too uncertain to meaningfully detect gaps in the evidence.
+_GAP_SCAN_CONFIDENCE_THRESHOLD: float = 0.3
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +456,6 @@ def score_gaps_welfare(gaps: list, phi_metrics: dict[str, float]) -> list:
         AnalysisResult without gaps field.
     """
     from src.core.types import Gap
-    from dataclasses import replace
 
     scored_gaps = []
     for gap in gaps:
@@ -380,8 +500,17 @@ def analyze(
     """
     intent = parse_intent(claim)
     evidence = retrieve_evidence(intent, graph)
+    evidence = _truncate_evidence(evidence)
     chain = fuse_reasoning(evidence, provider)
     result = verify_inline(intent, chain, provider, constitution, evidence=tuple(evidence))
+
+    # Gap detection — only when analysis has enough confidence to be meaningful
+    if result.confidence >= _GAP_SCAN_CONFIDENCE_THRESHOLD:
+        detected_gaps = _detect_gaps_inline(claim, evidence, provider)
+        if detected_gaps and phi_metrics is not None:
+            detected_gaps = score_gaps_welfare(detected_gaps, phi_metrics)
+        if detected_gaps:
+            result = replace(result, gaps=tuple(detected_gaps))
 
     # Welfare scoring when phi_metrics provided
     if phi_metrics is not None:
@@ -390,7 +519,6 @@ def analyze(
             score_hypothesis_welfare as _score_welfare,
         )
         from src.detective.hypothesis import Hypothesis
-        from dataclasses import replace
 
         constructs = _infer(claim)
         if constructs:

@@ -33,14 +33,18 @@ def store(tmp_path: Path) -> TraceStore:
 @pytest.fixture
 def client(store: TraceStore) -> TestClient:
     """App with a trace store wired in."""
-    app = create_app(trace_store=store)
+    from src.data.graph_store import InMemoryGraph
+
+    app = create_app(trace_store=store, graph=InMemoryGraph())
     return TestClient(app)
 
 
 @pytest.fixture
 def client_no_store() -> TestClient:
     """App without a trace store — trace endpoints degrade gracefully."""
-    app = create_app()
+    from src.data.graph_store import InMemoryGraph
+
+    app = create_app(graph=InMemoryGraph())
     return TestClient(app)
 
 

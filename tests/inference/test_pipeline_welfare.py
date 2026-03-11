@@ -14,17 +14,68 @@ _force_keyword = patch(
 )
 
 
-def test_analyze_returns_gaps_with_welfare_impact():
+@_force_keyword
+def test_analyze_returns_gaps_with_welfare_impact(_mock):
     """analyze() should populate welfare_impact for detected gaps."""
-    # This test requires gaps to be detected and returned by analyze()
-    # Current analyze() returns AnalysisResult without gaps field
-    # This is a placeholder for future gap detection integration
-    pytest.skip("Gap detection not yet integrated into analyze() pipeline")
+    # Provider returns multi-step reasoning (confidence > 0.3 threshold)
+    # then returns a gap detection response
+    responses = iter([
+        "Step 1.\nStep 2.\nConclusion: confirmed.",  # fuse_reasoning
+        "Verdict: plausible.",                         # verify_inline
+        "GAP|temporal|Missing records for 2013-2015 resource allocation",  # gap scan
+    ])
+    provider = MockProvider(response="")
+    provider.complete = lambda prompt, **kw: next(responses)
+
+    graph = InMemoryGraph()
+    graph.add_edge("EntityA", "PolicyX", "causal", confidence=0.9)
+
+    class _C:
+        def critique(self, _):
+            return "Epistemic honesty."
+
+    result = analyze(
+        claim="Resource allocation gap in poverty region",
+        provider=provider,
+        graph=graph,
+        library=EMPTY_LIBRARY,
+        constitution=_C(),
+        phi_metrics={"c": 0.2, "kappa": 0.5, "j": 0.5, "p": 0.5,
+                     "eps": 0.5, "lam_L": 0.5, "lam_P": 0.5, "xi": 0.5},
+    )
+
+    assert len(result.gaps) >= 1
+    assert result.gaps[0].welfare_impact > 0.0
 
 
-def test_gaps_sorted_by_welfare_urgency():
+@_force_keyword
+def test_gaps_sorted_by_welfare_urgency(_mock):
     """Gaps returned by analyze() should be sorted by welfare urgency."""
-    pytest.skip("Gap detection not yet integrated into analyze() pipeline")
+    responses = iter([
+        "Step 1.\nStep 2.\nConclusion: confirmed.",
+        "Verdict: plausible.",
+        "GAP|temporal|Resource deprivation gap\nGAP|evidential|Administrative note missing",
+    ])
+    provider = MockProvider(response="")
+    provider.complete = lambda prompt, **kw: next(responses)
+
+    graph = InMemoryGraph()
+
+    class _C:
+        def critique(self, _):
+            return "Epistemic honesty."
+
+    result = analyze(
+        claim="Resource allocation gap analysis",
+        provider=provider,
+        graph=graph,
+        library=EMPTY_LIBRARY,
+        constitution=_C(),
+        phi_metrics={"c": 0.1, "lam_P": 0.5, "xi": 0.5},
+    )
+
+    if len(result.gaps) >= 2:
+        assert result.gaps[0].welfare_impact >= result.gaps[1].welfare_impact
 
 
 @_force_keyword
