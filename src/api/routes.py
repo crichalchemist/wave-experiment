@@ -146,6 +146,13 @@ def create_app(
                 for SSE streaming, recent queries, and JSONL history.
     All route handlers share the same provider/store instances via closure.
     """
+    # Load .env.local so uvicorn-launched apps get the same config as CLI
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(".env.local", override=False)
+    except ImportError:
+        pass
+
     from src.core.log import configure_logging
     configure_logging()
 
@@ -168,11 +175,16 @@ def create_app(
             )
             _provider = MockProvider(response=_API_MOCK_RESPONSE)
 
-    # If no explicit trace_store, extract from the provider (hybrid mode creates one)
+    # Resolve trace store: explicit arg > provider attribute > DETECTIVE_TRACE_PATH env
     if trace_store is not None:
         _trace_store = trace_store
     else:
         _trace_store = getattr(_provider, "_trace_store", None)
+        if _trace_store is None:
+            _trace_path = os.environ.get("DETECTIVE_TRACE_PATH")
+            if _trace_path:
+                from pathlib import Path
+                _trace_store = TraceStore(path=Path(_trace_path))
 
     app = FastAPI(title=API_TITLE, version=API_VERSION)
 
